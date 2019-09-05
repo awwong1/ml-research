@@ -1,0 +1,1 @@
+All cifar adapted models originated from [bearpaw/pytorch-classification](https://github.com/bearpaw/pytorch-classification/tree/master/models/cifar).

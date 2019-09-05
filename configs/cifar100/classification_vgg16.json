@@ -6,7 +6,7 @@
     "schedule": [81, 122],
     "gamma": 0.1,
     "model": {
-        "name": "torchvision.models.vgg16",
+        "name": "models.cifar.vgg.vgg16",
         "kwargs": {
             "num_classes": 100
         }
