@@ -175,18 +175,18 @@ class ClassificationAgent(BaseAgent):
             global_step=epoch,
         )
         self.logger.info(
-            "FIN Epoch %(epoch)d/%(epochs)d | LR: %(lr)f | "
-            + "Train Loss: %(tloss).4f Acc: %(tacc).2f | "
-            + "Eval Loss: %(eloss).4f Acc: %(eacc).2f | Took %(dt)s (%(tdt)s)",
-            epoch=epoch,
-            epochs=self.epochs,
-            lr=self.lr,
-            tloss=train_res["task_loss"],
-            tacc=train_res["top1_acc"],
-            eloss=eval_res["task_loss"],
-            eacc=eval_res["top1_acc"],
-            dt=str(epoch_elapsed),
-            tdt=str(time() - self.exp_start)
+            "FIN Epoch %(epoch)d/%(epochs)d LR: %(lr)f | Train Loss: %(tloss).4f Acc: %(tacc).2f | Eval Loss: %(eloss).4f Acc: %(eacc).2f | Took %(dt)s (%(tdt)s)",
+            {
+                "epoch": epoch,
+                "epochs": self.epochs,
+                "lr": self.lr,
+                "tloss": train_res["task_loss"],
+                "tacc": train_res["top1_acc"],
+                "eloss": eval_res["task_loss"],
+                "eacc": eval_res["top1_acc"],
+                "dt": str(epoch_elapsed),
+                "tdt": str(time() - self.exp_start),
+            },
         )
 
         is_best = eval_res["top1_acc"] > self.best_acc1
