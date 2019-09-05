@@ -147,7 +147,11 @@ class ClassificationAgent(BaseAgent):
                     self.optimizer.step()
 
                 t.set_description(
-                    "Epoch {epoch}/{epochs} ".format(epoch=epoch, epochs=self.epochs)
+                    "{mode} Epoch {epoch}/{epochs} ".format(
+                        mode="Train" if train else "Eval",
+                        epoch=epoch,
+                        epochs=self.epochs,
+                    )
                     + "Task Loss: {loss:.4f} | ".format(loss=task_meter.avg)
                     + "top1: {top1:.2f}% | top5: {top5:.2f}%".format(
                         top1=acc1_meter.avg, top5=acc5_meter.avg
@@ -175,7 +179,10 @@ class ClassificationAgent(BaseAgent):
             global_step=epoch,
         )
         self.logger.info(
-            "FIN Epoch %(epoch)d/%(epochs)d LR: %(lr)f | Train Loss: %(tloss).4f Acc: %(tacc).2f | Eval Loss: %(eloss).4f Acc: %(eacc).2f | Took %(dt)s (%(tdt)s)",
+            "FIN Epoch %(epoch)d/%(epochs)d LR: %(lr)f | "
+            + "Train Loss: %(tloss).4f Acc: %(tacc).2f | "
+            + "Eval Loss: %(eloss).4f Acc: %(eacc).2f | "
+            + "Took %(dt).1fs (%(tdt).1fs)",
             {
                 "epoch": epoch,
                 "epochs": self.epochs,
@@ -184,8 +191,8 @@ class ClassificationAgent(BaseAgent):
                 "tacc": train_res["top1_acc"],
                 "eloss": eval_res["task_loss"],
                 "eacc": eval_res["top1_acc"],
-                "dt": str(epoch_elapsed),
-                "tdt": str(time() - self.exp_start),
+                "dt": epoch_elapsed,
+                "tdt": time() - self.exp_start,
             },
         )
 
