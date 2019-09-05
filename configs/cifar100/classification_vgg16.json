@@ -1,20 +1,20 @@
 {
-    "exp_name": "cifar10-vgg16",
+    "exp_name": "cifar100-vgg16",
     "agent": "agents.classification.ClassificationAgent",
     "cpu_only": false,
-    "epochs": 100,
-    "schedule": [60, 80],
+    "epochs": 164,
+    "schedule": [81, 122],
     "gamma": 0.1,
     "model": {
         "name": "torchvision.models.vgg16",
         "kwargs": {
-            "num_classes": 10
+            "num_classes": 100
         }
     },
     "train_data": {
-        "name": "torchvision.datasets.CIFAR10",
+        "name": "torchvision.datasets.CIFAR100",
         "args": [
-            "data/cifar10"
+            "data/cifar100"
         ],
         "kwargs": {
             "train": true,
