@@ -1,0 +1,103 @@
+{
+    "exp_name": "cifar10-vgg16",
+    "agent": "agents.classification.ClassificationAgent",
+    "cpu_only": false,
+    "model": {
+        "name": "torchvision.models.vgg16",
+        "kwargs": {
+            "num_classes": 10
+        }
+    },
+    "train_data": {
+        "name": "torchvision.datasets.CIFAR10",
+        "args": [
+            "data/cifar10"
+        ],
+        "kwargs": {
+            "train": true,
+            "download": true
+        },
+        "transform": [
+            {
+                "name": "torchvision.transforms.RandomCrop",
+                "args": [
+                    32
+                ],
+                "kwargs": {
+                    "padding": 4
+                }
+            },
+            {
+                "name": "torchvision.transforms.RandomHorizontalFlip"
+            },
+            {
+                "name": "torchvision.transforms.ToTensor"
+            },
+            {
+                "name": "torchvision.transforms.Normalize",
+                "args": [
+                    [
+                        0.4914,
+                        0.4822,
+                        0.4465
+                    ],
+                    [
+                        0.2023,
+                        0.1994,
+                        0.2010
+                    ]
+                ]
+            }
+        ],
+        "dataloader_kwargs": {
+            "batch_size": 256,
+            "num_workers": 8,
+            "shuffle": true
+        }
+    },
+    "eval_data": {
+        "name": "torchvision.datasets.CIFAR10",
+        "args": [
+            "data/cifar10"
+        ],
+        "kwargs": {
+            "train": false,
+            "download": true
+        },
+        "transform": [
+            {
+                "name": "torchvision.transforms.ToTensor"
+            },
+            {
+                "name": "torchvision.transforms.Normalize",
+                "args": [
+                    [
+                        0.4914,
+                        0.4822,
+                        0.4465
+                    ],
+                    [
+                        0.2023,
+                        0.1994,
+                        0.2010
+                    ]
+                ]
+            }
+        ],
+        "dataloader_kwargs": {
+            "batch_size": 256,
+            "num_workers": 8
+        }
+    },
+    "task_loss": {
+        "name": "torch.nn.CrossEntropyLoss"
+    },
+    "optimizer": {
+        "name": "torch.optim.SGD",
+        "kwargs": {
+            "lr": 0.1,
+            "momentum": 0.9,
+            "weight_decay": 5e-4
+        }
+    }
+}

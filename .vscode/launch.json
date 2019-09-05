@@ -1,0 +1,20 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Classify VGG_16 CIFAR10",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "args": [
+                "configs/cifar10/classification_vgg16.json",
+                "--override",
+                "{\"train_data\": {\"dataloader_kwargs\": {\"num_workers\": 0}}, \"eval_data\": {\"dataloader_kwargs\": {\"num_workers\": 0}}}"
+            ],
+            "console": "integratedTerminal"
+        }
+    ]
+}
