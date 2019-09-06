@@ -61,9 +61,9 @@
         }
     },
     "eval_data": {
-        "name": "torchvision.datasets.CIFAR10",
+        "name": "torchvision.datasets.CIFAR100",
         "args": [
-            "data/cifar10"
+            "data/cifar100"
         ],
         "kwargs": {
             "train": false,
