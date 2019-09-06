@@ -10,7 +10,7 @@
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=awwong1@ualberta.ca
 
-module load gcc cuda cudnn opencv/3.4.3
+module load arch/avx512 StdEnv/2018.3
 nvidia-smi
 source venv/bin/activate
 
