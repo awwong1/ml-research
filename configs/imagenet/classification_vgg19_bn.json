@@ -1,34 +1,28 @@
 {
-    "exp_name": "cifar100-vgg19_bn",
+    "exp_name": "imagenet-vgg19_bn",
     "agent": "agents.classification.ClassificationAgent",
     "cpu_only": false,
     "epochs": 164,
     "schedule": [81, 122],
     "gamma": 0.1,
     "model": {
-        "name": "models.cifar.vgg.vgg19_bn",
-        "kwargs": {
-            "num_classes": 100
-        }
+        "name": "torchvision.models.vgg19_bn"
     },
     "train_data": {
-        "name": "torchvision.datasets.CIFAR100",
+        "name": "torchvision.datasets.ImageNet",
         "args": [
-            "data/cifar100"
+            "data/imagenet"
         ],
         "kwargs": {
-            "train": true,
+            "split": "train",
             "download": true
         },
         "transform": [
             {
-                "name": "torchvision.transforms.RandomCrop",
+                "name": "torchvision.transforms.RandomResizedCrop",
                 "args": [
-                    32
-                ],
-                "kwargs": {
-                    "padding": 4
-                }
+                    224
+                ]
             },
             {
                 "name": "torchvision.transforms.RandomHorizontalFlip"
@@ -40,14 +34,14 @@
                 "name": "torchvision.transforms.Normalize",
                 "args": [
                     [
-                        0.4914,
-                        0.4822,
-                        0.4465
+                        0.485,
+                        0.456,
+                        0.406
                     ],
                     [
-                        0.2023,
-                        0.1994,
-                        0.2010
+                        0.229,
+                        0.224,
+                        0.225
                     ]
                 ]
             }
@@ -59,15 +53,23 @@
         }
     },
     "eval_data": {
-        "name": "torchvision.datasets.CIFAR100",
+        "name": "torchvision.datasets.ImageNet",
         "args": [
-            "data/cifar100"
+            "data/imagenet"
         ],
         "kwargs": {
-            "train": false,
+            "split": "val",
             "download": true
         },
         "transform": [
+            {
+                "name": "torchvision.transforms.Resize",
+                "args": [256]
+            },
+            {
+                "name": "torchvision.transforms.CenterCrop",
+                "args": [224]
+            },
             {
                 "name": "torchvision.transforms.ToTensor"
             },
@@ -75,14 +77,14 @@
                 "name": "torchvision.transforms.Normalize",
                 "args": [
                     [
-                        0.4914,
-                        0.4822,
-                        0.4465
+                        0.485,
+                        0.456,
+                        0.406
                     ],
                     [
-                        0.2023,
-                        0.1994,
-                        0.2010
+                        0.229,
+                        0.224,
+                        0.225
                     ]
                 ]
             }

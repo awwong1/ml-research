@@ -85,6 +85,8 @@ class ClassificationAgent(BaseAgent):
             self.start_epoch = res_chkpt["epoch"]
             self.model.load_state_dict(res_chkpt["state_dict"])
             self.best_acc1 = res_chkpt["best_acc1"]
+            self.optimizer.load_state_dict(res_chkpt["optim_state_dict"])
+            self.logger.info("Resumed at epoch %d, eval best_acc1 %.2f", self.start_epoch, self.best_acc1)
             # fastforward LR to match current schedule
             for sched in self.schedule:
                 if sched > self.start_epoch:
@@ -232,6 +234,7 @@ class ClassificationAgent(BaseAgent):
                 "state_dict": state_dict,
                 "acc": eval_res["top1_acc"],
                 "best_acc1": self.best_acc1,
+                "optim_state_dict": self.optimizer.state_dict()
             },
             is_best,
             checkpoint_dir=self.config["chkpt_dir"],
