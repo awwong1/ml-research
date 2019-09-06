@@ -22,6 +22,7 @@ class ClassificationAgent(BaseAgent):
 
         # TensorBoard Summary Writer
         self.tb_sw = SummaryWriter(log_dir=config["tb_dir"])
+        self.tb_sw.add_text("config", str(config))
 
         # Configure seed, if provided
         seed = config.get("seed")
@@ -54,7 +55,7 @@ class ClassificationAgent(BaseAgent):
                 self.model = self.model.cuda()
 
         # Instantiate task loss and optimizer
-        self.task_loss = init_class(config.get("task_loss"))
+        self.task_loss_fn = init_class(config.get("task_loss"))
         self.optimizer = init_class(config.get("optimizer"), self.model.parameters())
 
         # Misc. Other classification hyperparameters
@@ -68,7 +69,7 @@ class ClassificationAgent(BaseAgent):
         # Log the classification experiment details
         self.logger.info("Train Dataset: %s", self.train_set)
         self.logger.info("Eval Dataset: %s", self.eval_set)
-        self.logger.info("Task Loss (Criterion): %s", self.task_loss)
+        self.logger.info("Task Loss (Criterion): %s", self.task_loss_fn)
         self.logger.info("Model Optimizer: %s", self.optimizer)
         self.logger.info("Model: %s", self.model)
         num_params = sum([p.numel() for p in self.model.parameters()])
@@ -117,23 +118,23 @@ class ClassificationAgent(BaseAgent):
         acc5_meter = AverageMeter("Top 5 Acc")
 
         if train:
-            self.model.train()
+            self.model = self.model.train()
             dataloader = self.train_loader
         else:
-            self.model.eval()
+            self.model = self.model.eval()
             dataloader = self.eval_loader
 
         with tqdm(total=len(dataloader)) as t:
             for inputs, targets in dataloader:
                 batch_size = inputs.size(0)
                 if self.use_cuda:
-                    inputs, targets = inputs.cuda(), targets.cuda()
+                    inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
 
                 # Compute forward pass of the model
                 outputs = self.model(inputs)
 
                 # Record task loss and accuracies
-                task_loss = self.task_loss(outputs, targets)
+                task_loss = self.task_loss_fn(outputs, targets)
                 task_meter.update(task_loss.data.item(), batch_size)
                 prec1, prec5 = calculate_accuracy(
                     outputs.data, targets.data, topk=(1, 5)

@@ -5,12 +5,12 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Classify VGG_16 CIFAR10",
+            "name": "Python: Classify VGG19_BN CIFAR100",
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/main.py",
             "args": [
-                "configs/cifar10/classification_vgg16.json",
+                "configs/cifar100/classification_vgg19_bn.json",
                 "--override",
                 "{\"train_data\": {\"dataloader_kwargs\": {\"num_workers\": 0}}, \"eval_data\": {\"dataloader_kwargs\": {\"num_workers\": 0}}}"
             ],
