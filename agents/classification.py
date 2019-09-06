@@ -60,24 +60,6 @@ class ClassificationAgent(BaseAgent):
         self.lr = self.optimizer.param_groups[0]["lr"]
         self.best_acc1 = 0
 
-        # Path to in progress checkpoint.pth.tar for resuming experiment
-        resume = config.get("resume")
-        if resume:
-            self.logger.info("Resuming from checkpoint: %s", resume)
-            res_chkpt = torch.load(resume)
-            self.start_epoch = res_chkpt["epoch"]
-            self.model.load_state_dict(res_chkpt["state_dict"])
-            self.best_acc1 = res_chkpt["best_acc1"]
-            # fastforward LR to match current schedule
-            for epoch in range(self.start_epoch):
-                self.lr = adjust_learning_rate(
-                    self.optimizer,
-                    epoch,
-                    lr=self.lr,
-                    schedule=self.schedule,
-                    gamma=self.gamma,
-                )
-
         # Log the classification experiment details
         self.logger.info("Train Dataset: %s", self.train_set)
         self.logger.info("Eval Dataset: %s", self.eval_set)
@@ -91,12 +73,38 @@ class ClassificationAgent(BaseAgent):
             {"params": num_params, "lrn_params": num_lrn_p},
         )
         self.logger.info(
-            "Training from Epoch %(start)d to %(end)d",
-            {"start": self.start_epoch, "end": self.epochs},
-        )
-        self.logger.info(
             "LR: %(lr)f decreasing by a factor of %(gamma)f at epochs %(schedule)s",
             {"lr": self.lr, "gamma": self.gamma, "schedule": self.schedule},
+        )
+
+        # Path to in progress checkpoint.pth.tar for resuming experiment
+        resume = config.get("resume")
+        if resume:
+            self.logger.info("Resuming from checkpoint: %s", resume)
+            res_chkpt = torch.load(resume)
+            self.start_epoch = res_chkpt["epoch"]
+            self.model.load_state_dict(res_chkpt["state_dict"])
+            self.best_acc1 = res_chkpt["best_acc1"]
+            # fastforward LR to match current schedule
+            for sched in self.schedule:
+                if sched > self.start_epoch:
+                    break
+                new_lr = adjust_learning_rate(
+                    self.optimizer,
+                    sched,
+                    lr=self.lr,
+                    schedule=self.schedule,
+                    gamma=self.gamma,
+                )
+                self.logger.info(
+                    "LR fastforward from %(old)f to %(new)f at Epoch %(epoch)d",
+                    {"old": self.lr, "new": new_lr, "epoch": sched},
+                )
+                self.lr = new_lr
+
+        self.logger.info(
+            "Training from Epoch %(start)d to %(end)d",
+            {"start": self.start_epoch, "end": self.epochs},
         )
 
         # Support multiple GPUs using DataParallel
@@ -215,7 +223,7 @@ class ClassificationAgent(BaseAgent):
         is_best = eval_res["top1_acc"] > self.best_acc1
         self.best_acc1 = max(eval_res["top1_acc"], self.best_acc1)
         state_dict = self.model.state_dict()
-        if self.gpu_ids:
+        if self.gpu_ids and len(self.gpu_ids) > 1:
             # unwrap the torch.nn.DataParallel
             state_dict = list(self.model.children())[0].state_dict()
         save_checkpoint(
