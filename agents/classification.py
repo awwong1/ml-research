@@ -211,4 +211,5 @@ class ClassificationAgent(BaseAgent):
         )
 
     def finalize(self):
+        self.logger.info("Best Acc: %.1f", self.best_acc1)
         self.tb_sw.close()
