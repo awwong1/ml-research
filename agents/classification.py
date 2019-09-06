@@ -47,12 +47,6 @@ class ClassificationAgent(BaseAgent):
             self.tb_sw.add_graph(self.model, model_input.unsqueeze(0))
         except Exception as e:
             self.logger.warn(e)
-        if self.use_cuda:
-            # Support multiple GPUs using DataParallel
-            if len(self.gpu_ids) > 1:
-                self.model = torch.nn.DataParallel(self.model).cuda()
-            else:
-                self.model = self.model.cuda()
 
         # Instantiate task loss and optimizer
         self.task_loss_fn = init_class(config.get("task_loss"))
@@ -65,6 +59,24 @@ class ClassificationAgent(BaseAgent):
         self.gamma = config.get("gamma", 0.1)
         self.lr = self.optimizer.param_groups[0]["lr"]
         self.best_acc1 = 0
+
+        # Path to in progress checkpoint.pth.tar for resuming experiment
+        resume = config.get("resume")
+        if resume:
+            self.logger.info("Resuming from checkpoint: %s", resume)
+            res_chkpt = torch.load(resume)
+            self.start_epoch = res_chkpt["epoch"]
+            self.model.load_state_dict(res_chkpt["state_dict"])
+            self.best_acc1 = res_chkpt["best_acc1"]
+            # fastforward LR to match current schedule
+            for epoch in range(self.start_epoch):
+                self.lr = adjust_learning_rate(
+                    self.optimizer,
+                    epoch,
+                    lr=self.lr,
+                    schedule=self.schedule,
+                    gamma=self.gamma,
+                )
 
         # Log the classification experiment details
         self.logger.info("Train Dataset: %s", self.train_set)
@@ -86,6 +98,13 @@ class ClassificationAgent(BaseAgent):
             "LR: %(lr)f decreasing by a factor of %(gamma)f at epochs %(schedule)s",
             {"lr": self.lr, "gamma": self.gamma, "schedule": self.schedule},
         )
+
+        # Support multiple GPUs using DataParallel
+        if self.use_cuda:
+            if len(self.gpu_ids) > 1:
+                self.model = torch.nn.DataParallel(self.model).cuda()
+            else:
+                self.model = self.model.cuda()
 
     def run(self):
         self.exp_start = time()
@@ -117,12 +136,8 @@ class ClassificationAgent(BaseAgent):
         acc1_meter = AverageMeter("Top 1 Acc")
         acc5_meter = AverageMeter("Top 5 Acc")
 
-        if train:
-            self.model = self.model.train()
-            dataloader = self.train_loader
-        else:
-            self.model = self.model.eval()
-            dataloader = self.eval_loader
+        self.model.train(train)
+        dataloader = self.train_loader if train else self.eval_loader
 
         with tqdm(total=len(dataloader)) as t:
             for inputs, targets in dataloader:
@@ -199,10 +214,14 @@ class ClassificationAgent(BaseAgent):
 
         is_best = eval_res["top1_acc"] > self.best_acc1
         self.best_acc1 = max(eval_res["top1_acc"], self.best_acc1)
+        state_dict = self.model.state_dict()
+        if self.gpu_ids:
+            # unwrap the torch.nn.DataParallel
+            state_dict = list(self.model.children())[0].state_dict()
         save_checkpoint(
             {
                 "epoch": epoch + 1,
-                "state_dict": self.model.state_dict(),
+                "state_dict": state_dict,
                 "acc": eval_res["top1_acc"],
                 "best_acc1": self.best_acc1,
             },
