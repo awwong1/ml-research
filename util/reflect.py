@@ -22,8 +22,8 @@ def init_data(config):
     ds = ds_class(
         *config.get("args", []),
         **config.get("kwargs", {}),
-        transform=Compose(d_transform),
-        target_transform=Compose(d_ttransform)
+        transform=Compose(d_transform) if d_transform else None,
+        target_transform=Compose(d_ttransform) if d_ttransform else None
     )
     dl = DataLoader(ds, **config.get("dataloader_kwargs", {}))
     return ds, dl

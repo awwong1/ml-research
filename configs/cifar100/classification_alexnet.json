@@ -3,7 +3,10 @@
     "agent": "agents.classification.ClassificationAgent",
     "cpu_only": false,
     "epochs": 164,
-    "schedule": [81, 122],
+    "schedule": [
+        81,
+        122
+    ],
     "gamma": 0.1,
     "model": {
         "name": "models.cifar.alexnet.alexnet",
@@ -40,14 +43,14 @@
                 "name": "torchvision.transforms.Normalize",
                 "args": [
                     [
-                        0.4914,
-                        0.4822,
-                        0.4465
+                        0.5073617,
+                        0.4866903,
+                        0.44108883
                     ],
                     [
-                        0.2023,
-                        0.1994,
-                        0.2010
+                        0.26748818,
+                        0.25659317,
+                        0.27630863
                     ]
                 ]
             }
@@ -75,14 +78,14 @@
                 "name": "torchvision.transforms.Normalize",
                 "args": [
                     [
-                        0.4914,
-                        0.4822,
-                        0.4465
+                        0.5073617,
+                        0.4866903,
+                        0.44108883
                     ],
                     [
-                        0.2023,
-                        0.1994,
-                        0.2010
+                        0.26748818,
+                        0.25659317,
+                        0.27630863
                     ]
                 ]
             }

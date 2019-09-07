@@ -1,0 +1,37 @@
+{
+    "exp_name": "normalized-cifar100",
+    "agent": "agents.determine_normal.CalculateNormalizeAgent",
+    "cpu_only": false,
+    "datasets": [
+        {
+            "name": "torchvision.datasets.CIFAR100",
+            "args": [
+                "data/cifar100"
+            ],
+            "kwargs": {
+                "train": true,
+                "download": true
+            },
+            "transform": [
+                {
+                    "name": "torchvision.transforms.ToTensor"
+                }
+            ]
+        },
+        {
+            "name": "torchvision.datasets.CIFAR100",
+            "args": [
+                "data/cifar100"
+            ],
+            "kwargs": {
+                "train": false,
+                "download": true
+            },
+            "transform": [
+                {
+                    "name": "torchvision.transforms.ToTensor"
+                }
+            ]
+        }
+    ]
+}

@@ -15,6 +15,16 @@
                 "{\"train_data\": {\"dataloader_kwargs\": {\"num_workers\": 0}}, \"eval_data\": {\"dataloader_kwargs\": {\"num_workers\": 0}}}"
             ],
             "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: Determine Normalize CIFAR100",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "args": [
+                "configs/helpers/calculate_normalize_cifar100.json"
+            ],
+            "console": "integratedTerminal"
         }
     ]
 }
