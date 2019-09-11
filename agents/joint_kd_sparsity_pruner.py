@@ -234,7 +234,7 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                         mask_loss += self.mask_loss_fn(
                             mask, target=torch.zeros_like(mask)
                         )
-                    mask_loss.mul_(self.mask_loss_reg)
+                    mask_loss.div_(len(self.mask_modules)).mul_(self.mask_loss_reg)
                     mask_meter.update(mask_loss.data.item(), batch_size)
 
                     loss = task_loss + kd_loss + mask_loss
@@ -283,6 +283,7 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
         self.tb_sw.add_scalars(
             "epoch_sparsity", epoch_sparsity, global_step=epoch
         )
+        self.tb_sw.add_scalar("epoch_params", param_usage, global_step=epoch)
 
         self.tb_sw.add_scalars(
             "epoch",
@@ -293,8 +294,7 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                 "train_acc": train_res["top1_acc"],
                 "eval_acc": eval_res["top1_acc"],
                 "lr": self.lr,
-                "elapsed_time": epoch_elapsed,
-                "param_usage": param_usage
+                "elapsed_time": epoch_elapsed
             },
             global_step=epoch,
         )
@@ -312,8 +312,8 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                 "tml": train_res["mask_loss"],
                 "tacc": train_res["top1_acc"],
                 "eacc": eval_res["top1_acc"],
-                "params": param_usage,
                 "dt": epoch_elapsed,
+                "params": param_usage,
                 "tdt": time() - self.exp_start,
             },
         )
