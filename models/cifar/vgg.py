@@ -72,7 +72,7 @@ def make_layers(cfg, batch_norm=False, sparsity_mask=False):
                 layers += [conv2d, nn.ReLU(inplace=True)]
             if sparsity_mask:
                 mask_size = (1, v, 1, 1)
-                mask = MaskSTE(mask_size, kernel_size=conv2d.kernel_size)
+                mask = MaskSTE(mask_size, kernel_size=conv2d.kernel_size, in_channels=in_channels)
                 layers += [mask]
             in_channels = v
     return nn.Sequential(*layers)

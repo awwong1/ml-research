@@ -119,7 +119,7 @@
             "weight_decay": 5e-4
         }
     },
-    "task_loss_reg": 1.0,
+    "task_loss_reg": 10.0,
     "kd_loss_reg": 1.0,
     "mask_loss_reg": 1.0,
     "temperature": 4.0

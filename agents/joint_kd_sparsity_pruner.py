@@ -228,7 +228,7 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                     ).mul(self.kd_loss_reg)
                     kd_meter.update(kd_loss.data.item(), batch_size)
 
-                    mask_loss = torch.zeros(1)
+                    mask_loss = torch.zeros_like(task_loss)
                     for mask_module in self.mask_modules:
                         mask, _ = mask_module.get_binary_mask()
                         mask_loss += self.mask_loss_fn(
@@ -266,7 +266,7 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
             "overall_loss": overall_loss.avg,
             "task_loss": task_meter.avg,
             "kd_loss": kd_meter.avg,
-            "mask_loss": mask_loss.avg,
+            "mask_loss": mask_meter.avg,
             "top1_acc": acc1_meter.avg,
             "top5_acc": acc5_meter.avg,
         }
@@ -276,8 +276,8 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
         epoch_sparsity = {}
         for idx, mask_module in enumerate(self.mask_modules):
             mask, factor = mask_module.get_binary_mask()
-            mask_sparsity = sum(mask)
-            param_usage += sum(mask * factor)
+            mask_sparsity = sum(mask.view(-1))
+            param_usage += sum(mask.view(-1) * factor)
             epoch_sparsity["{:2d}".format(idx)] = mask_sparsity
 
         self.tb_sw.add_scalars(
@@ -287,7 +287,9 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
         self.tb_sw.add_scalars(
             "epoch",
             {
-                "train_loss": train_res["overall_loss"],
+                "train_task_loss": train_res["task_loss"],
+                "train_kd_loss": train_res["kd_loss"],
+                "train_mask_loss": train_res["mask_loss"],
                 "train_acc": train_res["top1_acc"],
                 "eval_acc": eval_res["top1_acc"],
                 "lr": self.lr,
@@ -298,14 +300,16 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
         )
         self.logger.info(
             "FIN Epoch %(epoch)d/%(epochs)d LR: %(lr)f | "
-            + "Train Loss: %(tloss).4f Acc: %(tacc).2f | "
-            + "Eval Acc: %(eacc).2f | Params: {params:.2e} | "
+            + "Train Task Loss: %(ttl).4f KDL: %(tkl).4f Mask Loss: %(tml).4f Acc: %(tacc).2f | "
+            + "Eval Acc: %(eacc).2f | Params: %(params).2e | "
             + "Took %(dt).1fs (%(tdt).1fs)",
             {
                 "epoch": epoch,
                 "epochs": self.epochs,
                 "lr": self.lr,
-                "tloss": train_res["overall_loss"],
+                "ttl": train_res["task_loss"],
+                "tkl": train_res["kd_loss"],
+                "tml": train_res["mask_loss"],
                 "tacc": train_res["top1_acc"],
                 "eacc": eval_res["top1_acc"],
                 "params": param_usage,
