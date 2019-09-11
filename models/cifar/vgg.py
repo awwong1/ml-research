@@ -1,5 +1,6 @@
 import torch.nn as nn
 import math
+from models.mask import MaskSTE
 
 
 __all__ = [
@@ -12,6 +13,7 @@ __all__ = [
     "vgg16_bn",
     "vgg19_bn",
     "vgg19",
+    "vgg19_bn_maskable"
 ]
 
 
@@ -56,7 +58,7 @@ class VGG(nn.Module):
                 m.bias.data.zero_()
 
 
-def make_layers(cfg, batch_norm=False):
+def make_layers(cfg, batch_norm=False, sparsity_mask=False):
     layers = []
     in_channels = 3
     for v in cfg:
@@ -68,6 +70,10 @@ def make_layers(cfg, batch_norm=False):
                 layers += [conv2d, nn.BatchNorm2d(v), nn.ReLU(inplace=True)]
             else:
                 layers += [conv2d, nn.ReLU(inplace=True)]
+            if sparsity_mask:
+                mask_size = (1, v, 1, 1)
+                mask = MaskSTE(mask_size, kernel_size=conv2d.kernel_size)
+                layers += [mask]
             in_channels = v
     return nn.Sequential(*layers)
 
@@ -182,4 +188,10 @@ def vgg19(**kwargs):
 def vgg19_bn(**kwargs):
     """VGG 19-layer model (configuration 'E') with batch normalization"""
     model = VGG(make_layers(cfg["E"], batch_norm=True), **kwargs)
+    return model
+
+
+def vgg19_bn_maskable(**kwargs):
+    """VGG 19-layer model (configuration 'E') with batch normalization & sparsity mask"""
+    model = VGG(make_layers(cfg["E"], batch_norm=True, sparsity_mask=True), **kwargs)
     return model

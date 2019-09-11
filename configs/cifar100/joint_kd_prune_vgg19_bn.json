@@ -1,0 +1,126 @@
+{
+    "exp_name": "joint_kd_prune-cifar100-vgg19_bn",
+    "agent": "agents.joint_kd_sparsity_pruner.JointKnowledgeDistillationPruningAgent",
+    "cpu_only": false,
+    "epochs": 164,
+    "schedule": [
+        81,
+        122
+    ],
+    "gamma": 0.1,
+    "prune": "experiments/cifar100-vgg19_bn/checkpoints/model_best.pth.tar",
+    "pretrained_model": {
+        "name": "models.cifar.vgg.vgg19_bn",
+        "kwargs": {
+            "num_classes": 100
+        }
+    },
+    "model": {
+        "name": "models.cifar.vgg.vgg19_bn_maskable",
+        "kwargs": {
+            "num_classes": 100
+        }
+    },
+    "train_data": {
+        "name": "torchvision.datasets.CIFAR100",
+        "args": [
+            "data/cifar100"
+        ],
+        "kwargs": {
+            "train": true,
+            "download": true
+        },
+        "transform": [
+            {
+                "name": "torchvision.transforms.RandomCrop",
+                "args": [
+                    32
+                ],
+                "kwargs": {
+                    "padding": 4
+                }
+            },
+            {
+                "name": "torchvision.transforms.RandomHorizontalFlip"
+            },
+            {
+                "name": "torchvision.transforms.ToTensor"
+            },
+            {
+                "name": "torchvision.transforms.Normalize",
+                "args": [
+                    [
+                        0.5073617,
+                        0.4866903,
+                        0.44108883
+                    ],
+                    [
+                        0.26748818,
+                        0.25659317,
+                        0.27630863
+                    ]
+                ]
+            }
+        ],
+        "dataloader_kwargs": {
+            "batch_size": 256,
+            "num_workers": 8,
+            "shuffle": true
+        }
+    },
+    "eval_data": {
+        "name": "torchvision.datasets.CIFAR100",
+        "args": [
+            "data/cifar100"
+        ],
+        "kwargs": {
+            "train": false,
+            "download": true
+        },
+        "transform": [
+            {
+                "name": "torchvision.transforms.ToTensor"
+            },
+            {
+                "name": "torchvision.transforms.Normalize",
+                "args": [
+                    [
+                        0.5073617,
+                        0.4866903,
+                        0.44108883
+                    ],
+                    [
+                        0.26748818,
+                        0.25659317,
+                        0.27630863
+                    ]
+                ]
+            }
+        ],
+        "dataloader_kwargs": {
+            "batch_size": 256,
+            "num_workers": 8
+        }
+    },
+    "task_loss": {
+        "name": "torch.nn.CrossEntropyLoss"
+    },
+    "mask_loss": {
+        "name": "torch.nn.L1Loss",
+        "kwargs": {
+            "reduction": "mean"
+        }
+    },
+    "optimizer": {
+        "name": "torch.optim.SGD",
+        "kwargs": {
+            "lr": 1e-4,
+            "momentum": 0.9,
+            "weight_decay": 5e-4
+        }
+    },
+    "task_loss_reg": 1.0,
+    "kd_loss_reg": 1.0,
+    "mask_loss_reg": 1.0,
+    "temperature": 4.0
+}
