@@ -3,8 +3,11 @@
     "agent": "agents.joint_kd_sparsity_pruner.JointKnowledgeDistillationPruningAgent",
     "cpu_only": false,
     "epochs": 164,
-    "schedule": [],
-    "gamma": 1,
+    "schedule": [
+        81,
+        122
+    ],
+    "gamma": 0.1,
     "prune": "experiments/cifar100-vgg19_bn/checkpoints/model_best.pth.tar",
     "pretrained_model": {
         "name": "models.cifar.vgg.vgg19_bn",
@@ -111,7 +114,7 @@
     "optimizer": {
         "name": "torch.optim.SGD",
         "kwargs": {
-            "lr": 1e-4,
+            "lr": 0.01,
             "momentum": 0.9,
             "weight_decay": 5e-4
         }
