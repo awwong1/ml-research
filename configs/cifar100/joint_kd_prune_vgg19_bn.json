@@ -121,6 +121,6 @@
     },
     "task_loss_reg": 10.0,
     "kd_loss_reg": 1.0,
-    "mask_loss_reg": 1.0,
+    "mask_loss_reg": 0.1,
     "temperature": 4.0
 }

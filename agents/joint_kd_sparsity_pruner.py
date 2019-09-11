@@ -278,7 +278,7 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
             mask, factor = mask_module.get_binary_mask()
             mask_sparsity = sum(mask.view(-1))
             param_usage += sum(mask.view(-1) * factor)
-            epoch_sparsity["{:2d}".format(idx)] = mask_sparsity
+            epoch_sparsity["{:02d}".format(idx)] = mask_sparsity
 
         self.tb_sw.add_scalars(
             "epoch_sparsity", epoch_sparsity, global_step=epoch
