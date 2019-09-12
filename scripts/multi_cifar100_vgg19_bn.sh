@@ -1,0 +1,12 @@
+#!/bin/bash
+# Train five different models for cifar100 vgg19 with batch norm
+
+NUM_RUNS=5
+
+for RUN_ID in `seq 1 ${NUM_RUNS}`;
+do
+    OVERRIDE="{\"gpu_ids\":[0],\"exp_name\":\"cifar100-vgg19_bn-run${RUN_ID}\"}"
+    echo "$OVERRIDE"
+    python3 main.py configs/cifar100/classification_vgg19_bn.json \
+        --override ${OVERRIDE}
+done
