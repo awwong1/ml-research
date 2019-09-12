@@ -5,6 +5,7 @@ from models.mask import MaskSTE
 
 __all__ = [
     "VGG",
+    "make_layers",
     "vgg11",
     "vgg11_bn",
     "vgg13",
@@ -30,10 +31,10 @@ class VGG(nn.Module):
     (c) YANG, Wei
     """
 
-    def __init__(self, features, num_classes=1000):
+    def __init__(self, features, num_classes=1000, classifier_input_features=512):
         super(VGG, self).__init__()
         self.features = features
-        self.classifier = nn.Linear(512, num_classes)
+        self.classifier = nn.Linear(classifier_input_features, num_classes)
         self._initialize_weights()
 
     def forward(self, x):

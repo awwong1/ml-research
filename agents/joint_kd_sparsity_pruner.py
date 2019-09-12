@@ -2,6 +2,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 from time import time
+from pprint import pformat
 
 from .base import BaseAgent
 from util.accuracy import calculate_accuracy
@@ -98,7 +99,7 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
         self.schedule = config.get("schedule", [150, 225])
         self.gamma = config.get("gamma", 0.1)
         self.lr = self.optimizer.param_groups[0]["lr"]
-        self.best_acc1 = 0
+        self.best_acc_per_usage = {}
 
         # Log the classification experiment details
         self.logger.info("Train Dataset: %s", self.train_set)
@@ -124,13 +125,15 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
             res_chkpt = torch.load(resume, map_location=map_location)
             self.start_epoch = res_chkpt["epoch"]
             self.model.load_state_dict(res_chkpt["state_dict"])
-            self.best_acc1 = res_chkpt["best_acc1"]
+            eval_acc = res_chkpt["acc"]
+            self.best_acc_per_usage = res_chkpt["best_acc_per_usage"]
             self.optimizer.load_state_dict(res_chkpt["optim_state_dict"])
             self.logger.info(
-                "Resumed at epoch %d, eval best_acc1 %.2f",
+                "Resumed at epoch %d, eval acc %.2f",
                 self.start_epoch,
-                self.best_acc1,
+                eval_acc
             )
+            self.logger.info(pformat(self.best_acc_per_usage))
             # fastforward LR to match current schedule
             for sched in self.schedule:
                 if sched > self.start_epoch:
@@ -318,8 +321,12 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
             },
         )
 
-        is_best = eval_res["top1_acc"] > self.best_acc1
-        self.best_acc1 = max(eval_res["top1_acc"], self.best_acc1)
+        is_best_key = "{:.1e}".format(param_usage)
+        prev_usage_best_acc = self.best_acc_per_usage.get(is_best_key, 0)
+        usage_best_acc = max(eval_res["top1_acc"], prev_usage_best_acc)
+        self.best_acc_per_usage[is_best_key] = usage_best_acc
+        is_best = eval_res["top1_acc"] > prev_usage_best_acc
+
         state_dict = self.model.state_dict()
         if self.gpu_ids and len(self.gpu_ids) > 1:
             # unwrap the torch.nn.DataParallel
@@ -329,13 +336,15 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                 "epoch": epoch + 1,
                 "state_dict": state_dict,
                 "acc": eval_res["top1_acc"],
-                "best_acc1": self.best_acc1,
+                "best_acc_per_usage": self.best_acc_per_usage,
                 "optim_state_dict": self.optimizer.state_dict(),
+                "param_usage": param_usage
             },
             is_best,
             checkpoint_dir=self.config["chkpt_dir"],
         )
 
     def finalize(self):
-        self.logger.info("Best Acc: %.1f", self.best_acc1)
+        self.logger.info("Best Acc per usage:")
+        self.logger.info(pformat(self.best_acc_per_usage))
         self.tb_sw.close()

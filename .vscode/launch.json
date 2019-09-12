@@ -29,6 +29,16 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Python: Pack Sparse Model",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "args": [
+                "configs/helpers/pack_sparse_model_vgg19_bn_maskable.json"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Python: Determine Normalize CIFAR100",
             "type": "python",
             "request": "launch",
