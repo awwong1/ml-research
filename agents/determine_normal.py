@@ -24,9 +24,10 @@ class CalculateNormalizeAgent(BaseAgent):
             ds_means, ds_stds = self.derive_normalize(dataset)
             self.logger.info(dataset)
             self.logger.info("mean %s, std %s", ds_means, ds_stds)
-        self.logger.info("All datasets combined: ")
-        all_means, all_stds = self.derive_normalize(ConcatDataset(self.datasets))
-        self.logger.info("mean %s, std %s", all_means, all_stds)
+        if len(self.datasets) > 1:
+            self.logger.info("All datasets combined: ")
+            all_means, all_stds = self.derive_normalize(ConcatDataset(self.datasets))
+            self.logger.info("mean %s, std %s", all_means, all_stds)
 
     def derive_normalize(self, dataset):
         ds_values = defaultdict(list)

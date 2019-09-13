@@ -17,21 +17,6 @@
                     "name": "torchvision.transforms.ToTensor"
                 }
             ]
-        },
-        {
-            "name": "torchvision.datasets.CIFAR100",
-            "args": [
-                "data/cifar100"
-            ],
-            "kwargs": {
-                "train": false,
-                "download": true
-            },
-            "transform": [
-                {
-                    "name": "torchvision.transforms.ToTensor"
-                }
-            ]
         }
     ]
 }
