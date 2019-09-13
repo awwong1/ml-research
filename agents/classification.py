@@ -82,10 +82,12 @@ class ClassificationAgent(BaseAgent):
         if resume:
             self.logger.info("Resuming from checkpoint: %s", resume)
             res_chkpt = torch.load(resume)
-            self.start_epoch = res_chkpt["epoch"]
             self.model.load_state_dict(res_chkpt["state_dict"])
-            self.best_acc1 = res_chkpt["best_acc1"]
-            self.optimizer.load_state_dict(res_chkpt["optim_state_dict"])
+            self.start_epoch = res_chkpt.get("epoch", 0)
+            self.best_acc1 = res_chkpt.get("best_acc1", 0)
+            optim_state_dict = res_chkpt.get("optim_state_dict")
+            if optim_state_dict:
+                self.optimizer.load_state_dict(optim_state_dict)
             self.logger.info("Resumed at epoch %d, eval best_acc1 %.2f", self.start_epoch, self.best_acc1)
             # fastforward LR to match current schedule
             for sched in self.schedule:
@@ -118,6 +120,10 @@ class ClassificationAgent(BaseAgent):
 
     def run(self):
         self.exp_start = time()
+        if self.epochs == 0:
+            # no training, just do an evaluation pass
+            with torch.no_grad():
+                eval_res = self.run_epoch_pass(epoch=0, train=False)
         for epoch in range(self.start_epoch, self.epochs):
             new_lr = adjust_learning_rate(
                 self.optimizer,

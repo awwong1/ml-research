@@ -1,6 +1,6 @@
 {
     "exp_name": "pack_sparse_model",
-    "agent": "agents.pack_sparse_model.MaskableVGGPackingAgent",
+    "agent": "agents.pack_sparse_model.MaskablePackingAgent",
     "cpu_only": false,
     "pack": "experiments/joint_kd_prune-cifar100-vgg19_bn/checkpoints/model_best.pth.tar",
     "pretrained_model": {

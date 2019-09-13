@@ -14,7 +14,8 @@ __all__ = [
     "vgg16_bn",
     "vgg19_bn",
     "vgg19",
-    "vgg19_bn_maskable"
+    "vgg19_bn_maskable",
+    "vgg_from_layers"
 ]
 
 
@@ -195,4 +196,10 @@ def vgg19_bn(**kwargs):
 def vgg19_bn_maskable(**kwargs):
     """VGG 19-layer model (configuration 'E') with batch normalization & sparsity mask"""
     model = VGG(make_layers(cfg["E"], batch_norm=True, sparsity_mask=True), **kwargs)
+    return model
+
+
+def vgg_from_layers(layers=[], batch_norm=True, **kwargs):
+    """VGG initializer from custom packed/pruned layer configuration"""
+    model = VGG(make_layers(layers, batch_norm=batch_norm, sparsity_mask=False), **kwargs)
     return model
