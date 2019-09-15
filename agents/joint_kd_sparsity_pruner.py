@@ -342,6 +342,8 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
             },
             is_best,
             checkpoint_dir=self.config["chkpt_dir"],
+            filename="checkpoint-{}.pth.tar".format(is_best_key),
+            best_filename="checkpoint-{}.pth.tar".format(is_best_key)
         )
 
     def finalize(self):
