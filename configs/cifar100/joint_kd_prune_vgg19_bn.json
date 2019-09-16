@@ -3,12 +3,8 @@
     "agent": "agents.joint_kd_sparsity_pruner.JointKnowledgeDistillationPruningAgent",
     "cpu_only": false,
     "epochs": 164,
-    "schedule": [
-        81,
-        122,
-        150
-    ],
-    "gamma": 0.1,
+    "schedule": [],
+    "gamma": 1,
     "prune": "experiments/cifar100-vgg19_bn/checkpoints/model_best.pth.tar",
     "pretrained_model": {
         "name": "models.cifar.vgg.vgg19_bn",

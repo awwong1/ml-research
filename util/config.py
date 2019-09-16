@@ -13,7 +13,7 @@ def configure_logging(log_dir):
 
     # Main logger
     main_logger = logging.getLogger()
-    main_logger.setLevel(logging.INFO)
+    main_logger.setLevel(logging.DEBUG)
     # Console handles INFO
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)

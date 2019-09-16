@@ -1,5 +1,4 @@
 from logging import getLogger
-from pprint import pformat
 
 
 class BaseAgent:
@@ -8,7 +7,6 @@ class BaseAgent:
         """
         self.config = config
         self.logger = getLogger(config.get("exp_name"))
-        self.logger.debug(pformat(config))
 
     def run(self):
         """Experiment's main logic, called by main.py.
