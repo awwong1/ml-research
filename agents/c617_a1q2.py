@@ -203,6 +203,9 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
                     + "Task Loss: {loss:.4f} | ".format(loss=task_meter.avg)
                     + "Acc: {top1:.2f}%".format(top1=acc1_meter.avg)
                 )
+                if mode != "Train":
+                    # multiple resolution evaluation only for Training, eval has full resolution only
+                    break
 
         return {"task_loss": task_meter.avg, "top1_acc": acc1_meter.avg}
 

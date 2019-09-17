@@ -3,8 +3,10 @@
     "agent": "agents.c617_a1q2.MultiResolutionFineTuneClassifier",
     "cpu_only": false,
     "epochs": 20,
-    "schedule": [],
-    "gamma": 1,
+    "schedule": [
+        10
+    ],
+    "gamma": 0.1,
     "model": {
         "name": "torchvision.models.mnasnet1_0",
         "kwargs": {
