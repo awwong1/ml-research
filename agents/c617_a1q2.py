@@ -116,6 +116,13 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
             {"lr": self.lr, "gamma": self.gamma, "schedule": self.schedule},
         )
 
+        # Support multiple GPUs using DataParallel
+        if self.use_cuda:
+            if len(self.gpu_ids) > 1:
+                self.model = torch.nn.DataParallel(self.model).cuda()
+            else:
+                self.model = self.model.cuda()
+
     def run(self):
         self.exp_start = time()
         if self.epochs == 0:
