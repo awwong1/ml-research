@@ -133,17 +133,6 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
             torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, 1)
         )
         self.model = MultiResolutionModelWrapper(base_model)
-        # self.model.fc = torch.nn.Linear(self.model.fc.in_features, 1)
-        try:
-            model_input, _target = next(iter(self.eval_loader))
-            self.model(model_input)
-
-            # Try to visualize tensorboard model graph structure
-            model_input, _target = next(iter(self.eval_set))
-            self.tb_sw.add_graph(self.model, model_input.unsqueeze(0))
-
-        except Exception as e:
-            self.logger.warn(e)
 
         # Instantiate task loss and optimizer
         self.task_loss_fn = init_class(config.get("task_loss"))
