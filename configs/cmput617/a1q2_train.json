@@ -2,11 +2,9 @@
     "exp_name": "cmput617-a1q2",
     "agent": "agents.c617_a1q2.MultiResolutionFineTuneClassifier",
     "cpu_only": false,
-    "epochs": 20,
-    "schedule": [
-        10
-    ],
-    "gamma": 0.1,
+    "epochs": 10,
+    "schedule": [],
+    "gamma": 1,
     "model": {
         "name": "torchvision.models.mnasnet1_0",
         "kwargs": {
@@ -15,7 +13,7 @@
         }
     },
     "num_workers": 4,
-    "batch_size": 128,
+    "batch_size": 12,
     "task_loss": {
         "name": "torch.nn.BCEWithLogitsLoss"
     },
