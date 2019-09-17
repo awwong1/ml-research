@@ -185,7 +185,7 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
                 # Record task loss and accuracies
                 task_loss = self.task_loss_fn(outputs.view(-1), targets.float())
                 # normalize depending on inv_multiplier
-                multiplier = (len(inputs_multires) - inv_multiplier) / len(inputs_multires)
+                multiplier = (len(inputs_multires) - inv_multiplier) / len(inputs_multires) ** 2
                 task_loss *= multiplier
                 task_meter.update(task_loss.data.item(), batch_size)
                 prec1 = calculate_binary_accuracy(outputs.data, targets.data)

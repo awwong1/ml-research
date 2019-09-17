@@ -2,7 +2,7 @@
     "exp_name": "cmput617-a1q2",
     "agent": "agents.c617_a1q2.MultiResolutionFineTuneClassifier",
     "cpu_only": false,
-    "epochs": 10,
+    "epochs": 20,
     "schedule": [],
     "gamma": 1,
     "model": {
