@@ -1,7 +1,9 @@
 {
     "exp_name": "cmput617-a1q2",
-    "agent": "agents.c617_a1q1.TestSetEvaluator",
+    "agent": "agents.c617_a1q2.TestSetEvaluator",
     "cpu_only": true,
+    "batch_size": 128,
+    "num_workers": 4,
     "model": {
         "name": "torchvision.models.mnasnet1_0",
         "kwargs": {
@@ -12,36 +14,5 @@
     "checkpoints": [
         "experiments/cmput617-a1q2/checkpoints/checkpoint.pth.tar",
         "experiments/cmput617-a1q2/checkpoints/model_best.pth.tar"
-    ],
-    "test_data": {
-        "name": "torchvision.datasets.ImageFolder",
-        "args": [
-            "data/c617a1/test"
-        ],
-        "transform": [
-            {
-                "name": "torchvision.transforms.ToTensor"
-            },
-            {
-                "name": "torchvision.transforms.Normalize",
-                "args": [
-                    [
-                        0.6705237030982971,
-                        0.6573456525802612,
-                        0.6612830758094788
-                    ],
-                    [
-                        0.19618913531303406,
-                        0.22384527325630188,
-                        0.23168295621871948
-                    ]
-                ]
-            }
-        ],
-        "dataloader_kwargs": {
-            "batch_size": 128,
-            "num_workers": 4
-        }
-    }
-
+    ]
 }

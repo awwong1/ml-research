@@ -290,3 +290,96 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
 
     def finalize(self):
         self.tb_sw.close()
+
+
+class TestSetEvaluator(BaseAgent):
+    def __init__(self, config):
+        super(TestSetEvaluator, self).__init__(config)
+
+        # TensorBoard Summary Writer
+        self.tb_sw = SummaryWriter(log_dir=config["tb_dir"])
+        self.tb_sw.add_text("config", str(config))
+
+        # Configure seed, if provided
+        seed = config.get("seed")
+        set_seed(seed, logger=self.logger)
+        self.tb_sw.add_text("seed", str(seed))
+
+        # Setup CUDA
+        cpu_only = config.get("cpu_only", False)
+        self.use_cuda, self.gpu_ids = set_cuda_devices(
+            cpu_only, config.get("gpu_ids"), logger=self.logger
+        )
+
+        # Instantiate Datasets and Dataloaders
+        # self.test_set, self.test_loader = init_data(config.get("test_data"))
+        base_transforms = [
+            ToTensor(),
+            Normalize(
+                [0.6705237030982971, 0.6573456525802612, 0.6612830758094788],
+                [0.19618913531303406, 0.22384527325630188, 0.23168295621871948],
+            ),
+            Lambda(expand_multires),
+        ]
+        self.test_set = ImageFolder(
+            "data/c617a1/test",
+            transform=Compose(base_transforms),
+        )
+        self.test_loader = DataLoader(
+            self.test_set,
+            num_workers=config.get("num_workers", 0),
+            batch_size=config.get("batch_size", 128),
+            shuffle=True,
+        )
+
+        # Instantiate Model
+        base_model = init_class(config.get("model"))
+        # manually convert pretrained model into a binary classification problem
+        base_model.classifier = torch.nn.Sequential(
+            torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, 1)
+        )
+        self.model = MultiResolutionModelWrapper(base_model)
+
+        self.logger.info("Test Dataset: %s", self.test_set)
+        self.checkpoints = config.get("checkpoints")
+        self.map_location = None if self.use_cuda else torch.device("cpu")
+        # Support multiple GPUs using DataParallel
+        if self.use_cuda:
+            if len(self.gpu_ids) > 1:
+                self.model = torch.nn.DataParallel(self.model).cuda()
+            else:
+                self.model = self.model.cuda()
+
+    def run(self):
+        for checkpoint_path in self.checkpoints:
+            self.logger.info("Loading '%s'", checkpoint_path)
+            chkpt = torch.load(checkpoint_path, map_location=self.map_location)
+            self.logger.info(
+                "Epoch %d, eval_acc: %.2f, best_eval_acc: %.2f",
+                chkpt["epoch"],
+                chkpt["acc"],
+                chkpt["best_acc1"],
+            )
+            self.model.load_state_dict(chkpt["state_dict"])
+            acc1_meter = AverageMeter("Top 1 Acc")
+
+            self.model.eval()
+
+            t = tqdm(self.test_loader)
+            for inputs, targets in t:
+                batch_size = inputs.size(0)
+                if self.use_cuda:
+                    inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
+
+                # Compute forward pass of the model
+                outputs = self.model(inputs)
+
+                # Record task loss and accuracies
+                prec1 = calculate_binary_accuracy(outputs.data, targets.data)
+                acc1_meter.update(prec1.item(), batch_size)
+
+                t.set_description("Test Acc: {top1:.2f}%".format(top1=acc1_meter.avg))
+            self.logger.info("Test Acc: %.2f", acc1_meter.avg)
+
+    def finalize(self):
+        self.tb_sw.close()

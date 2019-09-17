@@ -4,7 +4,7 @@
     "cpu_only": false,
     "epochs": 20,
     "schedule": [8],
-    "gamma": 1,
+    "gamma": 0.1,
     "model": {
         "name": "torchvision.models.mnasnet1_0",
         "kwargs": {
