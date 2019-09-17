@@ -38,12 +38,11 @@ def expand_multires(img_tensor):
     for raw_np_img in pyramid:
         raw_tensor = ToTensor()(raw_np_img)
         pil_img = ToPILImage()(raw_tensor.float())
-        res_pil_img = Resize((height, width))(pil_img)
-        res_tensor = ToTensor()(res_pil_img)
+        pil_img = Resize((height, width))(pil_img)
+        res_tensor = ToTensor()(pil_img)
         resized_multires.append(res_tensor)
-    multires = torch.stack(resized_multires, dim=3)
     # multires: (channel, height, width, resolution_dimension)
-    return multires
+    return torch.stack(resized_multires, dim=3)
 
 
 class MultiResolutionModelWrapper(torch.nn.Module):
@@ -57,7 +56,7 @@ class MultiResolutionModelWrapper(torch.nn.Module):
         self.base_model = base_model
         # takes number of resolution_dimensions, outputs single value
         self.dim_learner = torch.nn.Sequential(
-            torch.nn.ReLU(inplace=True),
+            torch.nn.Tanh(),
             torch.nn.Linear(resolution_dimensions, 1)
         )
 
