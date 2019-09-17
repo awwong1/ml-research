@@ -1,9 +1,9 @@
 {
     "exp_name": "cmput617-a1q2",
     "agent": "agents.c617_a1q2.TestSetEvaluator",
-    "cpu_only": true,
-    "batch_size": 128,
-    "num_workers": 4,
+    "cpu_only": false,
+    "batch_size": 1,
+    "num_workers": 2,
     "model": {
         "name": "torchvision.models.mnasnet1_0",
         "kwargs": {
