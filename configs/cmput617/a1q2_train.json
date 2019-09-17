@@ -1,0 +1,28 @@
+{
+    "exp_name": "cmput617-a1q2",
+    "agent": "agents.c617_a1q2.MultiResolutionFineTuneClassifier",
+    "cpu_only": false,
+    "epochs": 10,
+    "schedule": [],
+    "gamma": 1,
+    "model": {
+        "name": "torchvision.models.mnasnet1_0",
+        "kwargs": {
+            "pretrained": true,
+            "progress": true
+        }
+    },
+    "num_workers": 4,
+    "batch_size": 16,
+    "task_loss": {
+        "name": "torch.nn.BCEWithLogitsLoss"
+    },
+    "optimizer": {
+        "name": "torch.optim.SGD",
+        "kwargs": {
+            "lr": 0.01,
+            "momentum": 0.9,
+            "weight_decay": 5e-4
+        }
+    }
+}
