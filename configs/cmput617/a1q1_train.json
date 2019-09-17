@@ -1,0 +1,91 @@
+{
+    "exp_name": "cmput617-a1q1",
+    "agent": "agents.c617_a1q1.FineTuneClassifier",
+    "cpu_only": false,
+    "epochs": 10,
+    "schedule": [],
+    "gamma": 1,
+    "model": {
+        "name": "torchvision.models.mnasnet1_0",
+        "kwargs": {
+            "pretrained": true,
+            "progress": true
+        }
+    },
+    "train_data": {
+        "name": "torchvision.datasets.ImageFolder",
+        "args": [
+            "data/c617a1/train"
+        ],
+        "transform": [
+            {
+                "name": "torchvision.transforms.RandomHorizontalFlip"
+            },
+            {
+                "name": "torchvision.transforms.ToTensor"
+            },
+            {
+                "name": "torchvision.transforms.Normalize",
+                "args": [
+                    [
+                        0.6705237030982971,
+                        0.6573456525802612,
+                        0.6612830758094788
+                    ],
+                    [
+                        0.19618913531303406,
+                        0.22384527325630188,
+                        0.23168295621871948
+                    ]
+                ]
+            }
+        ],
+        "dataloader_kwargs": {
+            "batch_size": 128,
+            "num_workers": 4,
+            "shuffle": true
+        }
+    },
+    "eval_data": {
+        "name": "torchvision.datasets.ImageFolder",
+        "args": [
+            "data/c617a1/eval"
+        ],
+        "transform": [
+            {
+                "name": "torchvision.transforms.ToTensor"
+            },
+            {
+                "name": "torchvision.transforms.Normalize",
+                "args": [
+                    [
+                        0.6705237030982971,
+                        0.6573456525802612,
+                        0.6612830758094788
+                    ],
+                    [
+                        0.19618913531303406,
+                        0.22384527325630188,
+                        0.23168295621871948
+                    ]
+                ]
+            }
+        ],
+        "dataloader_kwargs": {
+            "batch_size": 128,
+            "num_workers": 4,
+            "shuffle": true
+        }
+    },
+    "task_loss": {
+        "name": "torch.nn.BCEWithLogitsLoss"
+    },
+    "optimizer": {
+        "name": "torch.optim.SGD",
+        "kwargs": {
+            "lr": 0.001,
+            "momentum": 0.9,
+            "weight_decay": 5e-4
+        }
+    }
+}

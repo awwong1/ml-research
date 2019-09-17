@@ -1,0 +1,29 @@
+{
+    "exp_name": "normalized-c617a1",
+    "agent": "agents.determine_normal.CalculateNormalizeAgent",
+    "cpu_only": false,
+    "datasets": [
+        {
+            "name": "torchvision.datasets.ImageFolder",
+            "args": [
+                "data/c617a1/train"
+            ],
+            "transform": [
+                {
+                    "name": "torchvision.transforms.ToTensor"
+                }
+            ]
+        },
+        {
+            "name": "torchvision.datasets.ImageFolder",
+            "args": [
+                "data/c617a1/eval"
+            ],
+            "transform": [
+                {
+                    "name": "torchvision.transforms.ToTensor"
+                }
+            ]
+        }
+    ]
+}

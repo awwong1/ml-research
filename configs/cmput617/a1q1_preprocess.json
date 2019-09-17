@@ -1,0 +1,8 @@
+{
+    "exp_name": "cmput617-a1q1",
+    "agent": "agents.c617_a1q1.PreprocessTileImage",
+    "tile_width": 256,
+    "tile_height": 256,
+    "input_glob": "data/c617a1raw/Pictures/*.tif",
+    "output_dir": "data/c617a1"
+}

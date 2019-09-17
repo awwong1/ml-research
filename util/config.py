@@ -13,17 +13,17 @@ def configure_logging(log_dir):
 
     # Main logger
     main_logger = logging.getLogger()
-    main_logger.setLevel(logging.DEBUG)
+    main_logger.setLevel(logging.INFO)
     # Console handles INFO
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(logging.Formatter(log_console_format))
-    # File handles DEBUG
-    exp_debug_file_handler = RotatingFileHandler(
-        "{}debug.log".format(log_dir), maxBytes=10 ** 6, backupCount=5
+    # File handles INFO
+    exp_info_file_handler = RotatingFileHandler(
+        "{}info.log".format(log_dir), maxBytes=10 ** 6, backupCount=5
     )
-    exp_debug_file_handler.setLevel(logging.DEBUG)
-    exp_debug_file_handler.setFormatter(logging.Formatter(log_file_format))
+    exp_info_file_handler.setLevel(logging.INFO)
+    exp_info_file_handler.setFormatter(logging.Formatter(log_file_format))
     # Warning file handles WARN
     exp_warn_file_handler = RotatingFileHandler(
         "{}warn.log".format(log_dir), maxBytes=10 ** 6, backupCount=5
@@ -32,7 +32,7 @@ def configure_logging(log_dir):
     exp_warn_file_handler.setFormatter(logging.Formatter(log_file_format))
 
     main_logger.addHandler(console_handler)
-    main_logger.addHandler(exp_debug_file_handler)
+    main_logger.addHandler(exp_info_file_handler)
     main_logger.addHandler(exp_warn_file_handler)
 
 
@@ -101,7 +101,7 @@ def parse_config(config_fp, raw_config_override=None):
     configure_logging(config["log_dir"])
     logger = logging.getLogger()
 
-    logger.debug(pformat(config))
+    logger.warn(pformat(config))
     logger.info("tensorboard output: {}".format(config["tb_dir"]))
     logger.info("checkpoint output: {}".format(config["chkpt_dir"]))
     logger.info("output directory: {}".format(config["out_dir"]))
