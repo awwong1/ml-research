@@ -26,7 +26,7 @@ from util.reflect import init_class
 from util.seed import set_seed
 
 
-def expand_multires(img_tensor):
+def expand_multires(img_tensor, keep=3):
     # get the original image dimensions
     _, height, width = img_tensor.size()
     # convert (CxHxW) to (HxWxC)
@@ -35,7 +35,9 @@ def expand_multires(img_tensor):
     pyramid = pyramid_gaussian(image, multichannel=True)
 
     resized_multires = []
-    for raw_np_img in pyramid:
+    for idx, raw_np_img in enumerate(pyramid):
+        if idx >= keep:
+            break
         raw_tensor = ToTensor()(raw_np_img)
         pil_img = ToPILImage()(raw_tensor.float())
         pil_img = Resize((height, width))(pil_img)
@@ -49,7 +51,7 @@ class MultiResolutionModelWrapper(torch.nn.Module):
     """Wrapper model for handling multiple resolution images
     """
 
-    def __init__(self, base_model, resolution_dimensions=9):
+    def __init__(self, base_model, resolution_dimensions=3):
         super(MultiResolutionModelWrapper, self).__init__()
         self.resolution_dimensions = resolution_dimensions
 

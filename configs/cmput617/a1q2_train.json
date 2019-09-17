@@ -20,7 +20,7 @@
     "optimizer": {
         "name": "torch.optim.SGD",
         "kwargs": {
-            "lr": 0.01,
+            "lr": 0.001,
             "momentum": 0.9,
             "weight_decay": 5e-4
         }
