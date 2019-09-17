@@ -164,7 +164,7 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
                     inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
 
                 # Compute forward pass of the model
-                outputs = self.model(inputs.float())
+                outputs = self.model(inputs)
 
                 # Record task loss and accuracies
                 task_loss = self.task_loss_fn(outputs.view(-1), targets.float())
