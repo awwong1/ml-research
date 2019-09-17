@@ -12,6 +12,8 @@
             "progress": true
         }
     },
+    "num_workers": 4,
+    "batch_size": 128,
     "task_loss": {
         "name": "torch.nn.BCEWithLogitsLoss"
     },

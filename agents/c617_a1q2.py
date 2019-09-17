@@ -66,11 +66,20 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
             "data/c617a1/train",
             transform=Compose([RandomHorizontalFlip()] + base_transforms),
         )
-        self.train_loader = DataLoader(self.train_set, num_workers=0, batch_size=4)
+        self.train_loader = DataLoader(
+            self.train_set,
+            num_workers=config.get("num_workers", 0),
+            batch_size=config.get("batch_size", 128),
+            shuffle=True,
+        )
         self.eval_set = ImageFolder(
             "data/c617a1/eval", transform=Compose(base_transforms)
         )
-        self.eval_loader = DataLoader(self.eval_set, num_workers=0, batch_size=4)
+        self.eval_loader = DataLoader(
+            self.eval_set,
+            num_workers=config.get("num_workers", 0),
+            batch_size=config.get("batch_size", 128),
+        )
 
         # Instantiate Model
         self.model = init_class(config.get("model"))
