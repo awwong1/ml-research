@@ -189,7 +189,9 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
                 task_loss *= multiplier
                 task_meter.update(task_loss.data.item(), batch_size)
                 prec1 = calculate_binary_accuracy(outputs.data, targets.data)
-                acc1_meter.update(prec1.item(), batch_size)
+                if inv_multiplier == 0:
+                    # accuracy only measured on full resolution image
+                    acc1_meter.update(prec1.item(), batch_size)
 
                 if mode == "Train":
                     self.optimizer.zero_grad()
