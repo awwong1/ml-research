@@ -10,6 +10,8 @@ from torchvision.transforms import (
     ToTensor,
     Normalize,
     Lambda,
+    Resize,
+    ToPILImage,
 )
 from torchvision.datasets import ImageFolder
 from skimage.transform import pyramid_gaussian
@@ -25,12 +27,55 @@ from util.seed import set_seed
 
 
 def expand_multires(img_tensor):
+    # get the original image dimensions
+    _, height, width = img_tensor.size()
     # convert (CxHxW) to (HxWxC)
     image = img_tensor.permute(1, 2, 0)
-    pyramid = tuple(
-        (img.transpose((2, 0, 1)) for img in pyramid_gaussian(image, multichannel=True))
-    )
-    return pyramid
+    # construct the image pyramid
+    pyramid = pyramid_gaussian(image, multichannel=True)
+
+    resized_multires = []
+    for raw_np_img in pyramid:
+        raw_tensor = ToTensor()(raw_np_img)
+        pil_img = ToPILImage()(raw_tensor.float())
+        res_pil_img = Resize((height, width))(pil_img)
+        res_tensor = ToTensor()(res_pil_img)
+        resized_multires.append(res_tensor)
+    multires = torch.stack(resized_multires, dim=3)
+    # multires: (channel, height, width, resolution_dimension)
+    return multires
+
+
+class MultiResolutionModelWrapper(torch.nn.Module):
+    """Wrapper model for handling multiple resolution images
+    """
+
+    def __init__(self, base_model, resolution_dimensions=9):
+        super(MultiResolutionModelWrapper, self).__init__()
+        self.resolution_dimensions = resolution_dimensions
+
+        self.base_model = base_model
+        # takes number of resolution_dimensions, outputs single value
+        self.dim_learner = torch.nn.Linear(resolution_dimensions, 1)
+
+    def forward(self, x):
+        """x = (B, C, H, W, D)
+        B: batch dimension
+        C: image channels (RGB)
+        H: height
+        W: width
+        D: number of resolution dimensions
+        """
+        # split each resolution dimension into its own tensor
+        res_xs = x.chunk(self.resolution_dimensions, dim=-1)
+        res_preds = []
+        for res_x in res_xs:
+            res_pred = self.base_model(res_x.squeeze(dim=-1))
+            res_preds.append(res_pred)
+        # combine each resolution dimension back into a single tensor
+        multires_preds = torch.cat(res_preds, dim=-1)
+        out = self.dim_learner(multires_preds)
+        return out
 
 
 class MultiResolutionFineTuneClassifier(BaseAgent):
@@ -82,13 +127,17 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
         )
 
         # Instantiate Model
-        self.model = init_class(config.get("model"))
+        base_model = init_class(config.get("model"))
         # manually convert pretrained model into a binary classification problem
-        self.model.classifier = torch.nn.Sequential(
+        base_model.classifier = torch.nn.Sequential(
             torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, 1)
         )
+        self.model = MultiResolutionModelWrapper(base_model)
         # self.model.fc = torch.nn.Linear(self.model.fc.in_features, 1)
         try:
+            model_input, _target = next(iter(self.eval_loader))
+            self.model(model_input)
+
             # Try to visualize tensorboard model graph structure
             model_input, _target = next(iter(self.eval_set))
             self.tb_sw.add_graph(self.model, model_input.unsqueeze(0))
@@ -172,42 +221,35 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
             dataloader = self.eval_loader
 
         t = tqdm(dataloader)
-        for inputs_multires, targets in t:
-            for inv_multiplier, inputs in enumerate(inputs_multires):
-                inputs = inputs.float()
-                batch_size = inputs.size(0)
-                if self.use_cuda:
-                    inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
+        for inputs, targets in t:
+            batch_size = inputs.size(0)
+            if self.use_cuda:
+                inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
 
-                # Compute forward pass of the model
-                outputs = self.model(inputs)
+            # Compute forward pass of the model
+            outputs = self.model(inputs)
 
-                # Record task loss and accuracies
-                task_loss = self.task_loss_fn(outputs.view(-1), targets.float())
-                # normalize depending on inv_multiplier
-                multiplier = (len(inputs_multires) - inv_multiplier) / len(inputs_multires) ** 2
-                task_loss *= multiplier
-                task_meter.update(task_loss.data.item(), batch_size)
-                prec1 = calculate_binary_accuracy(outputs.data, targets.data)
-                if inv_multiplier == 0:
-                    # accuracy only measured on full resolution image
-                    acc1_meter.update(prec1.item(), batch_size)
+            # Record task loss and accuracies
+            task_loss = self.task_loss_fn(outputs.view(-1), targets.float())
+            task_meter.update(task_loss.data.item(), batch_size)
+            prec1 = calculate_binary_accuracy(outputs.data, targets.data)
+            acc1_meter.update(prec1.item(), batch_size)
 
-                if mode == "Train":
-                    self.optimizer.zero_grad()
-                    task_loss.backward()
-                    self.optimizer.step()
+            if mode == "Train":
+                self.optimizer.zero_grad()
+                task_loss.backward()
+                self.optimizer.step()
 
-                t.set_description(
-                    "{mode} Epoch {epoch}/{epochs} ".format(
-                        mode=mode, epoch=epoch, epochs=self.epochs
-                    )
-                    + "Task Loss: {loss:.4f} | ".format(loss=task_meter.avg)
-                    + "Acc: {top1:.2f}%".format(top1=acc1_meter.avg)
+            t.set_description(
+                "{mode} Epoch {epoch}/{epochs} ".format(
+                    mode=mode, epoch=epoch, epochs=self.epochs
                 )
-                if mode != "Train":
-                    # multiple resolution evaluation only for Training, eval has full resolution only
-                    break
+                + "Task Loss: {loss:.4f} | ".format(loss=task_meter.avg)
+                + "Acc: {top1:.2f}%".format(top1=acc1_meter.avg)
+            )
+            if mode != "Train":
+                # multiple resolution evaluation only for Training, eval has full resolution only
+                break
 
         return {"task_loss": task_meter.avg, "top1_acc": acc1_meter.avg}
 
