@@ -56,7 +56,10 @@ class MultiResolutionModelWrapper(torch.nn.Module):
 
         self.base_model = base_model
         # takes number of resolution_dimensions, outputs single value
-        self.dim_learner = torch.nn.Linear(resolution_dimensions, 1)
+        self.dim_learner = torch.nn.Sequential(
+            torch.nn.ReLU(inplace=True),
+            torch.nn.Linear(resolution_dimensions, 1)
+        )
 
     def forward(self, x):
         """x = (B, C, H, W, D)
@@ -74,6 +77,7 @@ class MultiResolutionModelWrapper(torch.nn.Module):
             res_preds.append(res_pred)
         # combine each resolution dimension back into a single tensor
         multires_preds = torch.cat(res_preds, dim=-1)
+        
         out = self.dim_learner(multires_preds)
         return out
 
