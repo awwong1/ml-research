@@ -68,7 +68,7 @@
             "args": [
                 "configs/cmput617/a1q2_train.json",
                 "--override",
-                "{\"train_data\": {\"dataloader_kwargs\": {\"num_workers\": 0, \"batch_size\": 4}}, \"eval_data\": {\"dataloader_kwargs\": {\"num_workers\": 0, \"batch_size\": 4}}, \"test_data\": {\"dataloader_kwargs\": {\"num_workers\": 0, \"batch_size\": 4}}}"
+                "{\"num_workers\": 0, \"batch_size\":5}"
             ],
             "console": "integratedTerminal"
         }

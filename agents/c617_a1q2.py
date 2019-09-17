@@ -173,7 +173,7 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
 
         t = tqdm(dataloader)
         for inputs_multires, targets in t:
-            for inputs in inputs_multires:
+            for inv_multiplier, inputs in enumerate(inputs_multires):
                 inputs = inputs.float()
                 batch_size = inputs.size(0)
                 if self.use_cuda:
@@ -184,6 +184,9 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
 
                 # Record task loss and accuracies
                 task_loss = self.task_loss_fn(outputs.view(-1), targets.float())
+                # normalize depending on inv_multiplier
+                multiplier = (len(inputs_multires) - inv_multiplier) / len(inputs_multires)
+                task_loss *= multiplier
                 task_meter.update(task_loss.data.item(), batch_size)
                 prec1 = calculate_binary_accuracy(outputs.data, targets.data)
                 acc1_meter.update(prec1.item(), batch_size)
