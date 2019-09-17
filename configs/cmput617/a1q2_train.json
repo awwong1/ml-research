@@ -13,7 +13,7 @@
         }
     },
     "num_workers": 4,
-    "batch_size": 12,
+    "batch_size": 16,
     "task_loss": {
         "name": "torch.nn.BCEWithLogitsLoss"
     },
