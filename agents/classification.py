@@ -1,3 +1,4 @@
+import os
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -11,6 +12,7 @@ from util.cuda import set_cuda_devices
 from util.meters import AverageMeter
 from util.reflect import init_class, init_data
 from util.seed import set_seed
+from util.tablogger import TabLogger
 
 
 class ClassificationAgent(BaseAgent):
@@ -79,6 +81,18 @@ class ClassificationAgent(BaseAgent):
 
         # Path to in progress checkpoint.pth.tar for resuming experiment
         resume = config.get("resume")
+        t_log_fpath = os.path.join(config["out_dir"], "epoch.out")
+        self.t_log = TabLogger(t_log_fpath, resume=bool(resume))  # tab logger
+        self.t_log.set_names(
+            [
+                "Epoch",
+                "Train Task Loss",
+                "Train Acc",
+                "Eval Task Loss",
+                "Eval Acc",
+                "LR",
+            ]
+        )
         if resume:
             self.logger.info("Resuming from checkpoint: %s", resume)
             res_chkpt = torch.load(resume)
@@ -88,7 +102,11 @@ class ClassificationAgent(BaseAgent):
             optim_state_dict = res_chkpt.get("optim_state_dict")
             if optim_state_dict:
                 self.optimizer.load_state_dict(optim_state_dict)
-            self.logger.info("Resumed at epoch %d, eval best_acc1 %.2f", self.start_epoch, self.best_acc1)
+            self.logger.info(
+                "Resumed at epoch %d, eval best_acc1 %.2f",
+                self.start_epoch,
+                self.best_acc1,
+            )
             # fastforward LR to match current schedule
             for sched in self.schedule:
                 if sched > self.start_epoch:
@@ -210,6 +228,16 @@ class ClassificationAgent(BaseAgent):
             },
             global_step=epoch,
         )
+        self.t_log.append(
+            [
+                epoch,
+                train_res["task_loss"],
+                train_res["top1_acc"],
+                eval_res["task_loss"],
+                eval_res["top1_acc"],
+                self.lr
+            ]
+        )
         self.logger.info(
             "FIN Epoch %(epoch)d/%(epochs)d LR: %(lr)f | "
             + "Train Loss: %(tloss).4f Acc: %(tacc).2f | "
@@ -240,7 +268,7 @@ class ClassificationAgent(BaseAgent):
                 "state_dict": state_dict,
                 "acc": eval_res["top1_acc"],
                 "best_acc1": self.best_acc1,
-                "optim_state_dict": self.optimizer.state_dict()
+                "optim_state_dict": self.optimizer.state_dict(),
             },
             is_best,
             checkpoint_dir=self.config["chkpt_dir"],
@@ -249,3 +277,4 @@ class ClassificationAgent(BaseAgent):
     def finalize(self):
         self.logger.info("Best Acc: %.1f", self.best_acc1)
         self.tb_sw.close()
+        self.t_log.close()
