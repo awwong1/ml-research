@@ -10,14 +10,13 @@ from torchvision.transforms import (
     ToTensor,
     Normalize,
     Lambda,
-    Resize,
     ToPILImage,
 )
 from torchvision.datasets import ImageFolder
 from skimage.transform import pyramid_gaussian
 
 from .base import BaseAgent
-from util.accuracy import calculate_binary_accuracy
+from util.accuracy import calculate_multires_accuracy
 from util.adjust import adjust_learning_rate
 from util.checkpoint import save_checkpoint
 from util.cuda import set_cuda_devices
@@ -34,52 +33,42 @@ def expand_multires(img_tensor, keep=3):
     # construct the image pyramid
     pyramid = pyramid_gaussian(image, multichannel=True)
 
-    resized_multires = []
+    multi_res = []
     for idx, raw_np_img in enumerate(pyramid):
         if idx >= keep:
             break
         raw_tensor = ToTensor()(raw_np_img)
         pil_img = ToPILImage()(raw_tensor.float())
-        pil_img = Resize((height, width))(pil_img)
+        # pil_img = Resize((height, width))(pil_img)
         res_tensor = ToTensor()(pil_img)
-        resized_multires.append(res_tensor)
+        multi_res.append(res_tensor)
     # multires: (channel, height, width, resolution_dimension)
-    return torch.stack(resized_multires, dim=3)
+    # return torch.stack(multi_res, dim=3)
+    return multi_res
 
 
 class MultiResolutionModelWrapper(torch.nn.Module):
     """Wrapper model for handling multiple resolution images
     """
 
-    def __init__(self, base_model, resolution_dimensions=3):
+    def __init__(self, base_model):
         super(MultiResolutionModelWrapper, self).__init__()
-        self.resolution_dimensions = resolution_dimensions
-
         self.base_model = base_model
-        # takes number of resolution_dimensions, outputs single value
-        self.dim_learner = torch.nn.Sequential(
-            torch.nn.Tanh(),
-            torch.nn.Linear(resolution_dimensions, 1)
-        )
 
-    def forward(self, x):
-        """x = (B, C, H, W, D)
+    def forward(self, multi_x):
+        """x = (B, C, H, W)
         B: batch dimension
         C: image channels (RGB)
         H: height
         W: width
-        D: number of resolution dimensions
         """
-        # split each resolution dimension into its own tensor
-        res_xs = x.chunk(self.resolution_dimensions, dim=-1)
         res_preds = []
-        for res_x in res_xs:
-            res_pred = self.base_model(res_x.squeeze(dim=-1))
+        for x in multi_x:
+            res_pred = self.base_model(x)
             res_preds.append(res_pred)
         # combine each resolution dimension back into a single tensor
-        multires_preds = torch.cat(res_preds, dim=-1)
-        
-        out = self.dim_learner(multires_preds)
+        # multires_preds = torch.cat(res_preds, dim=-1)
+        out = torch.stack(res_preds, dim=-1)
         return out
 
 
@@ -133,9 +122,15 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
 
         # Instantiate Model
         base_model = init_class(config.get("model"))
+        # Freeze all of the parameters (except for final classification layer which we add afterwards)
+        for param in base_model.parameters():
+            param.requires_grad = False
+
         # manually convert pretrained model into a binary classification problem
         base_model.classifier = torch.nn.Sequential(
-            torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, 1)
+            torch.nn.Dropout(p=0.2, inplace=True),
+            torch.nn.Linear(1280, 2),
+            # torch.nn.Conv2d(80, 2, kernel_size=4)  # equivalent to Linear(1280, 2)
         )
         self.model = MultiResolutionModelWrapper(base_model)
 
@@ -216,17 +211,28 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
 
         t = tqdm(dataloader)
         for inputs, targets in t:
-            batch_size = inputs.size(0)
+            batch_size = inputs[0].size(0)
             if self.use_cuda:
-                inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
+                inputs = [inp.cuda() for inp in inputs]
+                targets = targets.cuda(non_blocking=True)
 
             # Compute forward pass of the model
             outputs = self.model(inputs)
 
+            # update targets to match resolution dimensionality
+            resolution_dimensions = outputs.size()[-1]
+            target_vals = torch.zeros(
+                (batch_size, resolution_dimensions),
+                dtype=targets.dtype,
+                layout=targets.layout,
+                device=targets.device,
+            )
+            target_vals.index_fill_(0, targets, 1)
+
             # Record task loss and accuracies
-            task_loss = self.task_loss_fn(outputs.view(-1), targets.float())
+            task_loss = self.task_loss_fn(outputs, target_vals)
             task_meter.update(task_loss.data.item(), batch_size)
-            prec1 = calculate_binary_accuracy(outputs.data, targets.data)
+            prec1, = calculate_multires_accuracy(outputs.data, targets.data)
             acc1_meter.update(prec1.item(), batch_size)
 
             if mode == "Train":
@@ -327,8 +333,7 @@ class TestSetEvaluator(BaseAgent):
             Lambda(expand_multires),
         ]
         self.test_set = ImageFolder(
-            "data/c617a1/test",
-            transform=Compose(base_transforms),
+            "data/c617a1/test", transform=Compose(base_transforms)
         )
         self.test_loader = DataLoader(
             self.test_set,
