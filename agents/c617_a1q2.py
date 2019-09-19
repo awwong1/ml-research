@@ -16,7 +16,7 @@ from torchvision.datasets import ImageFolder
 from skimage.transform import pyramid_gaussian
 
 from .base import BaseAgent
-from util.accuracy import calculate_multires_accuracy
+from util.accuracy import calculate_accuracy
 from util.adjust import adjust_learning_rate
 from util.checkpoint import save_checkpoint
 from util.cuda import set_cuda_devices
@@ -51,9 +51,14 @@ class MultiResolutionModelWrapper(torch.nn.Module):
     """Wrapper model for handling multiple resolution images
     """
 
-    def __init__(self, base_model):
+    def __init__(self, base_model, num_resolutions=3):
         super(MultiResolutionModelWrapper, self).__init__()
+        self.num_resolutions = num_resolutions
         self.base_model = base_model
+        self.dim_learner = torch.nn.Sequential(
+            torch.nn.Tanh(),
+            torch.nn.Linear(2 * num_resolutions, 2)
+        )
 
     def forward(self, multi_x):
         """x = (B, C, H, W)
@@ -63,12 +68,14 @@ class MultiResolutionModelWrapper(torch.nn.Module):
         W: width
         """
         res_preds = []
+        assert self.num_resolutions == len(multi_x), "mismatched number of image resolutions"
         for x in multi_x:
             res_pred = self.base_model(x)
             res_preds.append(res_pred)
         # combine each resolution dimension back into a single tensor
         # multires_preds = torch.cat(res_preds, dim=-1)
-        out = torch.stack(res_preds, dim=-1)
+        pre_out = torch.stack(res_preds, dim=-1)
+        out = self.dim_learner(pre_out.flatten(start_dim=1))
         return out
 
 
@@ -132,7 +139,7 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
             torch.nn.Linear(1280, 2),
             # torch.nn.Conv2d(80, 2, kernel_size=4)  # equivalent to Linear(1280, 2)
         )
-        self.model = MultiResolutionModelWrapper(base_model)
+        self.model = MultiResolutionModelWrapper(base_model, )
 
         # Instantiate task loss and optimizer
         self.task_loss_fn = init_class(config.get("task_loss"))
@@ -220,19 +227,20 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
             outputs = self.model(inputs)
 
             # update targets to match resolution dimensionality
-            resolution_dimensions = outputs.size()[-1]
-            target_vals = torch.zeros(
-                (batch_size, resolution_dimensions),
-                dtype=targets.dtype,
-                layout=targets.layout,
-                device=targets.device,
-            )
-            target_vals.index_fill_(0, targets, 1)
+            # resolution_dimensions = outputs.size()[-1]
+            # target_vals = torch.zeros(
+            #     (batch_size, resolution_dimensions),
+            #     dtype=targets.dtype,
+            #     layout=targets.layout,
+            #     device=targets.device,
+            # )
+            # target_vals.index_fill_(0, targets, 1)
 
             # Record task loss and accuracies
-            task_loss = self.task_loss_fn(outputs, target_vals)
+            task_loss = self.task_loss_fn(outputs, targets)
             task_meter.update(task_loss.data.item(), batch_size)
-            prec1, = calculate_multires_accuracy(outputs.data, targets.data)
+            # prec1, = calculate_multires_accuracy(outputs.data, targets.data)
+            prec1, = calculate_accuracy(outputs.data, targets.data)
             acc1_meter.update(prec1.item(), batch_size)
 
             if mode == "Train":
