@@ -3,7 +3,7 @@
     "agent": "agents.c617_a1q1.TestSetEvaluator",
     "cpu_only": true,
     "model": {
-        "name": "torchvision.models.mnasnet1_0",
+        "name": "torchvision.models.mobilenet_v2",
         "kwargs": {
             "pretrained": true,
             "progress": true

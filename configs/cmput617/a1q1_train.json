@@ -2,11 +2,11 @@
     "exp_name": "cmput617-a1q1",
     "agent": "agents.c617_a1q1.FineTuneClassifier",
     "cpu_only": false,
-    "epochs": 10,
-    "schedule": [],
-    "gamma": 1,
+    "epochs": 16,
+    "schedule": [8],
+    "gamma": 0.1,
     "model": {
-        "name": "torchvision.models.mnasnet1_0",
+        "name": "torchvision.models.mobilenet_v2",
         "kwargs": {
             "pretrained": true,
             "progress": true
@@ -78,7 +78,7 @@
         }
     },
     "task_loss": {
-        "name": "torch.nn.BCEWithLogitsLoss"
+        "name": "torch.nn.CrossEntropyLoss"
     },
     "optimizer": {
         "name": "torch.optim.SGD",

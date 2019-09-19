@@ -10,7 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 from time import time
 
 from .base import BaseAgent
-from util.accuracy import calculate_binary_accuracy
+from util.accuracy import calculate_accuracy
 from util.adjust import adjust_learning_rate
 from util.checkpoint import save_checkpoint
 from util.cuda import set_cuda_devices
@@ -194,11 +194,13 @@ class FineTuneClassifier(BaseAgent):
 
         # Instantiate Model
         self.model = init_class(config.get("model"))
+        # Freeze all of the parameters (except for final classification layer which we add afterwards)
+        for param in self.model.parameters():
+            param.requires_grad = False
         # manually convert pretrained model into a binary classification problem
         self.model.classifier = torch.nn.Sequential(
-            torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, 1)
+            torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, 2)
         )
-        # self.model.fc = torch.nn.Linear(self.model.fc.in_features, 1)
         try:
             # Try to visualize tensorboard model graph structure
             model_input, _target = next(iter(self.eval_set))
@@ -330,9 +332,9 @@ class FineTuneClassifier(BaseAgent):
             outputs = self.model(inputs)
 
             # Record task loss and accuracies
-            task_loss = self.task_loss_fn(outputs.view(-1), targets.float())
+            task_loss = self.task_loss_fn(outputs, targets)
             task_meter.update(task_loss.data.item(), batch_size)
-            prec1 = calculate_binary_accuracy(outputs.data, targets.data)
+            prec1, = calculate_accuracy(outputs.data, targets.data)
             acc1_meter.update(prec1.item(), batch_size)
 
             if mode == "Train":
@@ -429,7 +431,7 @@ class TestSetEvaluator(BaseAgent):
         self.model = init_class(config.get("model"))
         # manually convert pretrained model into a binary classification problem
         self.model.classifier = torch.nn.Sequential(
-            torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, 1)
+            torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, 2)
         )
 
         self.logger.info("Test Dataset: %s", self.test_set)
@@ -467,7 +469,7 @@ class TestSetEvaluator(BaseAgent):
                 outputs = self.model(inputs)
 
                 # Record task loss and accuracies
-                prec1 = calculate_binary_accuracy(outputs.data, targets.data)
+                prec1, = calculate_accuracy(outputs.data, targets.data)
                 acc1_meter.update(prec1.item(), batch_size)
 
                 t.set_description("Test Acc: {top1:.2f}%".format(top1=acc1_meter.avg))

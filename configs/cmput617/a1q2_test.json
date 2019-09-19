@@ -5,7 +5,7 @@
     "batch_size": 1,
     "num_workers": 2,
     "model": {
-        "name": "torchvision.models.mnasnet1_0",
+        "name": "torchvision.models.mobilenet_v2",
         "kwargs": {
             "pretrained": true,
             "progress": true
