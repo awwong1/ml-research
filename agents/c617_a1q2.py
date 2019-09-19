@@ -136,8 +136,7 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
         # manually convert pretrained model into a binary classification problem
         base_model.classifier = torch.nn.Sequential(
             torch.nn.Dropout(p=0.2, inplace=True),
-            torch.nn.Linear(1280, 2),
-            # torch.nn.Conv2d(80, 2, kernel_size=4)  # equivalent to Linear(1280, 2)
+            torch.nn.Linear(1280, 2)
         )
         self.model = MultiResolutionModelWrapper(base_model, )
 
@@ -354,7 +353,7 @@ class TestSetEvaluator(BaseAgent):
         base_model = init_class(config.get("model"))
         # manually convert pretrained model into a binary classification problem
         base_model.classifier = torch.nn.Sequential(
-            torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, 1)
+            torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, 2)
         )
         self.model = MultiResolutionModelWrapper(base_model)
 
@@ -385,15 +384,16 @@ class TestSetEvaluator(BaseAgent):
 
             t = tqdm(self.test_loader)
             for inputs, targets in t:
-                batch_size = inputs.size(0)
+                batch_size = inputs[0].size(0)
                 if self.use_cuda:
-                    inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
+                    inputs = [inp.cuda() for inp in inputs]
+                    targets = targets.cuda(non_blocking=True)
 
                 # Compute forward pass of the model
                 outputs = self.model(inputs)
 
                 # Record task loss and accuracies
-                prec1 = calculate_binary_accuracy(outputs.data, targets.data)
+                prec1, = calculate_accuracy(outputs.data, targets.data)
                 acc1_meter.update(prec1.item(), batch_size)
 
                 t.set_description("Test Acc: {top1:.2f}%".format(top1=acc1_meter.avg))
