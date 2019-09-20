@@ -1,0 +1,123 @@
+{
+    "exp_name": "admm_constrained-cifar100-vgg19_bn",
+    "agent": "agents.admm_constrained_pruner.ADMMPruningAgent",
+    "cpu_only": false,
+    "epochs": 10000,
+    "gamma": 0.1,
+    "schedule": 30,
+    "prune": "experiments/cifar100-vgg19_bn/checkpoints/model_best.pth.tar",
+    "budget": 4300000,
+    "criteria": "parameters",
+    "pretrained_model": {
+        "name": "models.cifar.vgg.vgg19_bn",
+        "kwargs": {
+            "num_classes": 100
+        }
+    },
+    "model": {
+        "name": "models.cifar.vgg.vgg19_bn_maskable",
+        "kwargs": {
+            "num_classes": 100
+        }
+    },
+    "train_data": {
+        "name": "torchvision.datasets.CIFAR100",
+        "args": [
+            "data/cifar100"
+        ],
+        "kwargs": {
+            "train": true,
+            "download": true
+        },
+        "transform": [
+            {
+                "name": "torchvision.transforms.RandomCrop",
+                "args": [
+                    32
+                ],
+                "kwargs": {
+                    "padding": 4
+                }
+            },
+            {
+                "name": "torchvision.transforms.RandomHorizontalFlip"
+            },
+            {
+                "name": "torchvision.transforms.ToTensor"
+            },
+            {
+                "name": "torchvision.transforms.Normalize",
+                "args": [
+                    [
+                        0.5070757269859314,
+                        0.48655039072036743,
+                        0.4409193694591522
+                    ],
+                    [
+                        0.2673310935497284,
+                        0.2564338147640228,
+                        0.2761472463607788
+                    ]
+                ]
+            }
+        ],
+        "dataloader_kwargs": {
+            "batch_size": 256,
+            "num_workers": 8,
+            "shuffle": true
+        }
+    },
+    "eval_data": {
+        "name": "torchvision.datasets.CIFAR100",
+        "args": [
+            "data/cifar100"
+        ],
+        "kwargs": {
+            "train": false,
+            "download": true
+        },
+        "transform": [
+            {
+                "name": "torchvision.transforms.ToTensor"
+            },
+            {
+                "name": "torchvision.transforms.Normalize",
+                "args": [
+                    [
+                        0.5070757269859314,
+                        0.48655039072036743,
+                        0.4409193694591522
+                    ],
+                    [
+                        0.2673310935497284,
+                        0.2564338147640228,
+                        0.2761472463607788
+                    ]
+                ]
+            }
+        ],
+        "dataloader_kwargs": {
+            "batch_size": 256,
+            "num_workers": 8
+        }
+    },
+    "task_loss": {
+        "name": "torch.nn.CrossEntropyLoss"
+    },
+    "mask_loss": {
+        "name": "torch.nn.L1Loss",
+        "kwargs": {
+            "reduction": "mean"
+        }
+    },
+    "optimizer": {
+        "name": "torch.optim.Adam",
+        "kwargs": {
+            "lr": 1e-4
+        }
+    },
+    "task_loss_reg": 10.0,
+    "kd_loss_reg": 1.0,
+    "mask_loss_reg": 1.0,
+    "temperature": 4.0
+}

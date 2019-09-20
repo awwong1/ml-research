@@ -6,8 +6,8 @@ from time import time
 from pprint import pformat
 
 from .base import BaseAgent
+from models.mask import MaskSTE
 from util.accuracy import calculate_accuracy
-from util.adjust import adjust_learning_rate
 from util.checkpoint import save_checkpoint
 from util.cuda import set_cuda_devices
 from util.losses import calculate_kd_loss
@@ -17,12 +17,11 @@ from util.seed import set_seed
 from util.tablogger import TabLogger
 
 
-class JointKnowledgeDistillationPruningAgent(BaseAgent):
-    """Agent for unconstrained knowledge distillation & pruning experiments.
-    """
+class ADMMPruningAgent(BaseAgent):
+    """Agent for constraineed knowledge distillation and pruning experiments."""
 
     def __init__(self, config):
-        super(JointKnowledgeDistillationPruningAgent, self).__init__(config)
+        super(ADMMPruningAgent, self).__init__(config)
 
         # TensorBoard Summary Writer
         self.tb_sw = SummaryWriter(log_dir=config["tb_dir"])
@@ -98,8 +97,8 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
         # Misc. Other classification hyperparameters
         self.epochs = config.get("epochs", 300)
         self.start_epoch = config.get("start_epoch", 0)
-        self.schedule = config.get("schedule", [150, 225])
         self.gamma = config.get("gamma", 0.1)
+        self.schedule = config.get("schedule", 30)
         self.lr = self.optimizer.param_groups[0]["lr"]
         self.best_acc_per_usage = {}
 
@@ -116,8 +115,20 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
             {"params": num_params, "lrn_params": num_lrn_p},
         )
         self.logger.info(
-            "LR: %(lr)f decreasing by a factor of %(gamma)f at epochs %(schedule)s",
+            "LR: %(lr)f decreasing by a factor of %(gamma)f at every %(schedule)s epochs",
             {"lr": self.lr, "gamma": self.gamma, "schedule": self.schedule},
+        )
+
+        self.budget = config.get("budget", 4300000)
+        self.criteria = config.get("criteria", "parameters")
+        if self.criteria == "parameters":
+            self.og_usage = sum(self.calculate_model_sparsity()).data.item()
+        else:
+            raise NotImplementedError("Unknown criteria: {}".format(self.criteria))
+        self.logger.info(
+            "Pruning from {:.2e} {} to {:.2e} {}.".format(
+                self.og_usage, self.criteria, self.budget, self.criteria
+            )
         )
 
         # Path to in progress checkpoint.pth.tar for resuming experiment
@@ -130,10 +141,12 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                 "Train Task Loss",
                 "Train KD Loss",
                 "Train Mask Loss",
+                "Train ADMM Mask Loss",
                 "Train Acc",
                 "Eval Task Loss",
                 "Eval KD Loss",
                 "Eval Mask Loss",
+                "Eval ADMM Mask Loss",
                 "Eval Acc",
                 "LR",
             ]
@@ -151,21 +164,17 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
             )
             self.logger.info(pformat(self.best_acc_per_usage))
             # fastforward LR to match current schedule
-            for sched in self.schedule:
-                if sched > self.start_epoch:
-                    break
-                new_lr = adjust_learning_rate(
-                    self.optimizer,
-                    sched,
-                    lr=self.lr,
-                    schedule=self.schedule,
-                    gamma=self.gamma,
-                )
-                self.logger.info(
-                    "LR fastforward from %(old)f to %(new)f at Epoch %(epoch)d",
-                    {"old": self.lr, "new": new_lr, "epoch": sched},
-                )
-                self.lr = new_lr
+            for i in range(self.start_epoch):
+                if i > 0 and i % self.schedule == 0:
+                    new_lr = self.lr * self.gamma
+                    for param_group in self.optimizer.param_groups:
+                        param_group["lr"] = new_lr
+
+                    self.logger.info(
+                        "LR fastforward from %(old)f to %(new)f at Epoch %(epoch)d",
+                        {"old": self.lr, "new": new_lr, "epoch": i},
+                    )
+                    self.lr = new_lr
 
         self.logger.info(
             "Training from Epoch %(start)d to %(end)d",
@@ -186,14 +195,11 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
     def run(self):
         self.exp_start = time()
         for epoch in range(self.start_epoch, self.epochs):
-            new_lr = adjust_learning_rate(
-                self.optimizer,
-                epoch,
-                lr=self.lr,
-                schedule=self.schedule,
-                gamma=self.gamma,
-            )
-            if new_lr != self.lr:
+            if epoch > 0 and epoch % self.schedule == 0:
+                new_lr = self.lr * self.gamma
+                for param_group in self.optimizer.param_groups:
+                    param_group["lr"] = new_lr
+
                 self.logger.info(
                     "LR changed from %(old)f to %(new)f at Epoch %(epoch)d",
                     {"old": self.lr, "new": new_lr, "epoch": epoch},
@@ -208,11 +214,37 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
 
             self.log_epoch_info(epoch, train_res, eval_res, epoch_elapsed)
 
+            # Check if budget has been reached
+            if self.criteria == "parameters":
+                current_usage = self.calculate_model_parameters().data.item()
+                budget_residual = current_usage - self.budget
+            else:
+                raise NotImplementedError("Unknown criteria: {}".format(self.criteria))
+
+            if budget_residual <= 0:
+                self.logger.info(
+                    "Budget of %.2e %s reached! At %.2e %s",
+                    self.budget,
+                    self.criteria,
+                    current_usage,
+                    self.criteria,
+                )
+                break
+        else:
+            self.logger.info(
+                "Could not reach budget of %.2e %s, at %.2e %s",
+                self.budget,
+                self.criteria,
+                current_usage,
+                self.criteria,
+            )
+
     def run_epoch_pass(self, epoch=-1, train=True):
         overall_loss = AverageMeter("Overall Loss")
         mask_meter = AverageMeter("Mask Loss")
         task_meter = AverageMeter("Task Loss")
         kd_meter = AverageMeter("KD Loss")
+        admm_mask_meter = AverageMeter("ADMM Mask Loss")
         acc1_meter = AverageMeter("Top 1 Acc")
         acc5_meter = AverageMeter("Top 5 Acc")
 
@@ -221,6 +253,9 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
 
         with tqdm(total=len(dataloader)) as t:
             for inputs, targets in dataloader:
+                # First Step, update all of the weights for entire model + mask
+                for parameters in self.model.parameters():
+                    parameters.requires_grad = True
                 batch_size = inputs.size(0)
                 if self.use_cuda:
                     inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
@@ -258,15 +293,50 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                     loss.backward()
                     self.optimizer.step()
 
+                # Second Step, update the mask with respect to the budget
+                for module in self.model.modules():
+                    if len(list(module.children())) > 0:
+                        continue
+                    for parameters in module.parameters():
+                        parameters.requires_grad = type(module) == MaskSTE
+                if self.criteria == "parameters":
+                    current_usage = sum(self.calculate_model_parameters()).data.item()
+                    over_budget = max(current_usage - self.budget, 0)
+                else:
+                    raise NotImplementedError(
+                        "Unknown criteria: {}".format(self.criteria)
+                    )
+
+                # normalize over original usage value
+                normalized_over_budget = over_budget / self.og_usage
+                admm_mask_loss = torch.zeros_like(loss)
+                for mask_module in self.mask_modules:
+                    mask, _ = mask_module.get_binary_mask()
+                    admm_mask_loss += self.mask_loss_fn(
+                        mask, target=torch.zeros_like(mask)
+                    )
+                admm_mask_loss.div_(len(self.mask_modules)).mul(self.mask_loss_reg)
+                admm_mask_loss = admm_mask_loss + admm_mask_loss.mul(
+                    normalized_over_budget
+                )
+
+                admm_mask_meter.update(admm_mask_loss.data.item(), batch_size)
+
+                if train:
+                    self.optimizer.zero_grad()
+                    admm_mask_loss.backward()
+                    self.optimizer.step()
+
                 t.set_description(
                     "{mode} Epoch {epoch}/{epochs} ".format(
                         mode="Train" if train else "Eval",
                         epoch=epoch,
                         epochs=self.epochs,
                     )
-                    + "Task Loss: {loss:.4f} | KD Loss: {kd:.4f} | Mask Loss: {ml:.4f} ".format(
+                    + "Task Loss: {loss:.4f} | KD Loss: {kd:.4f} | Mask Loss: {ml:.4f} | ".format(
                         loss=task_meter.avg, kd=kd_meter.avg, ml=mask_meter.avg
                     )
+                    + "ADMM Mask Loss {al:.4f} | ".format(al=admm_mask_meter.avg)
                     + "top1: {top1:.2f}% | top5: {top5:.2f}%".format(
                         top1=acc1_meter.avg, top5=acc5_meter.avg
                     )
@@ -278,6 +348,7 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
             "task_loss": task_meter.avg,
             "kd_loss": kd_meter.avg,
             "mask_loss": mask_meter.avg,
+            "admm_mask_loss": admm_mask_meter.avg,
             "top1_acc": acc1_meter.avg,
             "top5_acc": acc5_meter.avg,
         }
@@ -301,10 +372,12 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                 "train_task_loss": train_res["task_loss"],
                 "train_kd_loss": train_res["kd_loss"],
                 "train_mask_loss": train_res["mask_loss"],
+                "train_admm_mask_loss": train_res["admm_mask_loss"],
                 "eval_acc": eval_res["top1_acc"],
                 "eval_task_loss": eval_res["task_loss"],
                 "eval_kd_loss": eval_res["kd_loss"],
                 "eval_mask_loss": eval_res["mask_loss"],
+                "eval_admm_mask_loss": eval_res["admm_mask_loss"],
                 "lr": self.lr,
                 "elapsed_time": epoch_elapsed,
             },
@@ -316,17 +389,19 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                 train_res["task_loss"],
                 train_res["kd_loss"],
                 train_res["mask_loss"],
+                train_res["admm_mask_loss"],
                 train_res["top1_acc"],
                 eval_res["task_loss"],
                 eval_res["kd_loss"],
                 eval_res["mask_loss"],
+                eval_res["admm_mask_loss"],
                 eval_res["top1_acc"],
-                self.lr
+                self.lr,
             ]
         )
         self.logger.info(
             "FIN Epoch %(epoch)d/%(epochs)d LR: %(lr)f | "
-            + "Train Task Loss: %(ttl).4f KDL: %(tkl).4f Mask Loss: %(tml).4f Acc: %(tacc).2f | "
+            + "Train Task Loss: %(ttl).4f KDL: %(tkl).4f Mask Loss: %(tml).4f ADMM Loss: %(tadm).4f Acc: %(tacc).2f | "
             + "Eval Acc: %(eacc).2f | Params: %(params).2e | "
             + "Took %(dt).1fs (%(tdt).1fs)",
             {
@@ -336,6 +411,7 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                 "ttl": train_res["task_loss"],
                 "tkl": train_res["kd_loss"],
                 "tml": train_res["mask_loss"],
+                "tadm": train_res["admm_mask_loss"],
                 "tacc": train_res["top1_acc"],
                 "eacc": eval_res["top1_acc"],
                 "dt": epoch_elapsed,
@@ -374,3 +450,23 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
         self.logger.info(pformat(self.best_acc_per_usage))
         self.tb_sw.close()
         self.t_log.close()
+
+    @torch.no_grad()
+    def calculate_model_sparsity(self):
+        sparsity = []
+        for module in self.model.modules():
+            if type(module) == MaskSTE:
+                mask, _mask_factor = module.get_binary_mask()
+                layer_sparsity = sum(mask.view(-1))
+                sparsity.append(layer_sparsity)
+        return torch.stack(sparsity)
+
+    @torch.no_grad()
+    def calculate_model_parameters(self):
+        parameters = []
+        for module in self.model.modules():
+            if type(module) == MaskSTE:
+                mask, mask_factor = module.get_binary_mask()
+                layer_parameters = sum(mask.view(-1) * mask_factor)
+                parameters.append(layer_parameters)
+        return torch.stack(parameters)

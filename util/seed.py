@@ -10,7 +10,7 @@ def set_seed(seed, logger=None):
     - if type(seed) is int, set manual seed
     """
     if not seed:
-        return
+        return None
     if seed is True:
         seed = torch.seed()
     random.seed(seed)
@@ -21,3 +21,4 @@ def set_seed(seed, logger=None):
         logger.warning("Seed training is enabled with deterministic CUDNN.")
         logger.warning("Model training will slow down considerably.")
         logger.warning("Restarting from checkpoints is undefined behaviour.")
+    return seed
