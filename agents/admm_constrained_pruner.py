@@ -216,7 +216,7 @@ class ADMMPruningAgent(BaseAgent):
 
             # Check if budget has been reached
             if self.criteria == "parameters":
-                current_usage = self.calculate_model_parameters().data.item()
+                current_usage = sum(self.calculate_model_parameters()).data.item()
                 budget_residual = current_usage - self.budget
             else:
                 raise NotImplementedError("Unknown criteria: {}".format(self.criteria))
@@ -336,10 +336,11 @@ class ADMMPruningAgent(BaseAgent):
                     + "Task Loss: {loss:.4f} | KD Loss: {kd:.4f} | Mask Loss: {ml:.4f} | ".format(
                         loss=task_meter.avg, kd=kd_meter.avg, ml=mask_meter.avg
                     )
-                    + "ADMM Mask Loss {al:.4f} | ".format(al=admm_mask_meter.avg)
-                    + "top1: {top1:.2f}% | top5: {top5:.2f}%".format(
-                        top1=acc1_meter.avg, top5=acc5_meter.avg
+                    + "ADMM Loss {al:.4f} | ".format(al=admm_mask_meter.avg)
+                    + "top1: {top1:.2f}% | ".format(
+                        top1=acc1_meter.avg
                     )
+                    + "params: {:.2e}".format(current_usage)
                 )
                 t.update()
 
