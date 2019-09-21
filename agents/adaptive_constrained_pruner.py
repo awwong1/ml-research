@@ -17,11 +17,11 @@ from util.seed import set_seed
 from util.tablogger import TabLogger
 
 
-class ADMMPruningAgent(BaseAgent):
+class AdaptivePruningAgent(BaseAgent):
     """Agent for constraineed knowledge distillation and pruning experiments."""
 
     def __init__(self, config):
-        super(ADMMPruningAgent, self).__init__(config)
+        super(AdaptivePruningAgent, self).__init__(config)
 
         # TensorBoard Summary Writer
         self.tb_sw = SummaryWriter(log_dir=config["tb_dir"])
@@ -130,6 +130,16 @@ class ADMMPruningAgent(BaseAgent):
                 self.og_usage, self.criteria, self.budget, self.criteria
             )
         )
+        self.prune_difficulty_patience = config.get("prune_difficulty_patience", 4)
+        self.prune_reg_multiplier = config.get("prune_reg_multiplier", 1.1)
+        self.adaptive_difficulty = config.get("adaptive_difficulty_init", 1.0)
+        self.logger.info(
+            "Increasing adaptive difficulty of %.2f by factor of %.2f every %d epochs with no %s decrease",
+            self.adaptive_difficulty,
+            self.prune_reg_multiplier,
+            self.prune_difficulty_patience,
+            self.criteria,
+        )
 
         # Path to in progress checkpoint.pth.tar for resuming experiment
         resume = config.get("resume")
@@ -194,6 +204,9 @@ class ADMMPruningAgent(BaseAgent):
 
     def run(self):
         self.exp_start = time()
+        self.patience_min_budget = self.og_usage
+        self.patience_budget_counter = 0
+
         for epoch in range(self.start_epoch, self.epochs):
             if epoch > 0 and epoch % self.schedule == 0:
                 new_lr = self.lr * self.gamma
@@ -218,6 +231,19 @@ class ADMMPruningAgent(BaseAgent):
             if self.criteria == "parameters":
                 current_usage = sum(self.calculate_model_parameters()).data.item()
                 budget_residual = current_usage - self.budget
+                # Calculate adaptive difficulty change
+                if current_usage < self.patience_min_budget:
+                    self.patience_min_budget = current_usage
+                else:
+                    self.patience_budget_counter += 1
+                if self.patience_budget_counter >= self.prune_difficulty_patience:
+                    self.patience_budget_counter = 0
+                    self.adaptive_difficulty *= self.prune_reg_multiplier
+                    self.logger.info(
+                        "Increasing adaptive difficuly to %.2f due to no param reduction over %d epochs",
+                        self.adaptive_difficulty,
+                        self.prune_difficulty_patience,
+                    )
             else:
                 raise NotImplementedError("Unknown criteria: {}".format(self.criteria))
 
@@ -301,14 +327,12 @@ class ADMMPruningAgent(BaseAgent):
                         parameters.requires_grad = type(module) == MaskSTE
                 if self.criteria == "parameters":
                     current_usage = sum(self.calculate_model_parameters()).data.item()
-                    over_budget = max(current_usage - self.budget, 0)
                 else:
                     raise NotImplementedError(
                         "Unknown criteria: {}".format(self.criteria)
                     )
 
                 # normalize over original usage value
-                normalized_over_budget = over_budget / self.og_usage
                 admm_mask_loss = torch.zeros_like(loss)
                 for mask_module in self.mask_modules:
                     mask, _ = mask_module.get_binary_mask()
@@ -317,7 +341,7 @@ class ADMMPruningAgent(BaseAgent):
                     )
                 admm_mask_loss.div_(len(self.mask_modules)).mul(self.mask_loss_reg)
                 admm_mask_loss = admm_mask_loss + admm_mask_loss.mul(
-                    normalized_over_budget
+                    self.adaptive_difficulty
                 )
 
                 admm_mask_meter.update(admm_mask_loss.data.item(), batch_size)
@@ -337,9 +361,7 @@ class ADMMPruningAgent(BaseAgent):
                         loss=task_meter.avg, kd=kd_meter.avg, ml=mask_meter.avg
                     )
                     + "ADMM Loss {al:.4f} | ".format(al=admm_mask_meter.avg)
-                    + "top1: {top1:.2f}% | ".format(
-                        top1=acc1_meter.avg
-                    )
+                    + "top1: {top1:.2f}% | ".format(top1=acc1_meter.avg)
                     + "params: {:.2e}".format(current_usage)
                 )
                 t.update()
@@ -403,7 +425,7 @@ class ADMMPruningAgent(BaseAgent):
         self.logger.info(
             "FIN Epoch %(epoch)d/%(epochs)d LR: %(lr)f | "
             + "Train Task Loss: %(ttl).4f KDL: %(tkl).4f Mask Loss: %(tml).4f ADMM Loss: %(tadm).4f Acc: %(tacc).2f | "
-            + "Eval Acc: %(eacc).2f | Params: %(params).2e | "
+            + "Eval Acc: %(eacc).2f | Params: %(params).2e | Difficulty: %(adiff).2f"
             + "Took %(dt).1fs (%(tdt).1fs)",
             {
                 "epoch": epoch,
@@ -417,6 +439,7 @@ class ADMMPruningAgent(BaseAgent):
                 "eacc": eval_res["top1_acc"],
                 "dt": epoch_elapsed,
                 "params": param_usage,
+                "adiff": self.adaptive_difficulty,
                 "tdt": time() - self.exp_start,
             },
         )
