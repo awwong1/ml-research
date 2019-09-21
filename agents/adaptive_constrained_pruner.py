@@ -122,7 +122,7 @@ class AdaptivePruningAgent(BaseAgent):
         self.budget = config.get("budget", 4300000)
         self.criteria = config.get("criteria", "parameters")
         if self.criteria == "parameters":
-            self.og_usage = sum(self.calculate_model_sparsity()).data.item()
+            self.og_usage = sum(self.calculate_model_parameters()).data.item()
         else:
             raise NotImplementedError("Unknown criteria: {}".format(self.criteria))
         self.logger.info(
@@ -234,6 +234,7 @@ class AdaptivePruningAgent(BaseAgent):
                 # Calculate adaptive difficulty change
                 if current_usage < self.patience_min_budget:
                     self.patience_min_budget = current_usage
+                    self.patience_budget_counter = 0
                 else:
                     self.patience_budget_counter += 1
                 if self.patience_budget_counter >= self.prune_difficulty_patience:
