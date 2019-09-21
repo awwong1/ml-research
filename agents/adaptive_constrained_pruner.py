@@ -340,7 +340,7 @@ class AdaptivePruningAgent(BaseAgent):
                         mask, target=torch.zeros_like(mask)
                     )
                 admm_mask_loss.div_(len(self.mask_modules)).mul(self.mask_loss_reg)
-                admm_mask_loss = admm_mask_loss + admm_mask_loss.mul(
+                admm_mask_loss = admm_mask_loss.mul_(
                     self.adaptive_difficulty
                 )
 
@@ -425,7 +425,7 @@ class AdaptivePruningAgent(BaseAgent):
         self.logger.info(
             "FIN Epoch %(epoch)d/%(epochs)d LR: %(lr)f | "
             + "Train Task Loss: %(ttl).4f KDL: %(tkl).4f Mask Loss: %(tml).4f ADMM Loss: %(tadm).4f Acc: %(tacc).2f | "
-            + "Eval Acc: %(eacc).2f | Params: %(params).2e | Difficulty: %(adiff).2f"
+            + "Eval Acc: %(eacc).2f | Params: %(params).2e | Difficulty: %(adiff).2f "
             + "Took %(dt).1fs (%(tdt).1fs)",
             {
                 "epoch": epoch,
