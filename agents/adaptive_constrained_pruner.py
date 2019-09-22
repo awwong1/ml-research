@@ -151,12 +151,10 @@ class AdaptivePruningAgent(BaseAgent):
                 "Train Task Loss",
                 "Train KD Loss",
                 "Train Mask Loss",
-                "Train ADMM Mask Loss",
                 "Train Acc",
                 "Eval Task Loss",
                 "Eval KD Loss",
                 "Eval Mask Loss",
-                "Eval ADMM Mask Loss",
                 "Eval Acc",
                 "LR",
             ]
@@ -272,7 +270,6 @@ class AdaptivePruningAgent(BaseAgent):
         mask_meter = AverageMeter("Mask Loss")
         task_meter = AverageMeter("Task Loss")
         kd_meter = AverageMeter("KD Loss")
-        admm_mask_meter = AverageMeter("ADMM Mask Loss")
         acc1_meter = AverageMeter("Top 1 Acc")
         acc5_meter = AverageMeter("Top 5 Acc")
 
@@ -281,9 +278,13 @@ class AdaptivePruningAgent(BaseAgent):
 
         with tqdm(total=len(dataloader)) as t:
             for inputs, targets in dataloader:
-                # First Step, update all of the weights for entire model + mask
-                for parameters in self.model.parameters():
-                    parameters.requires_grad = True
+                # First Step, update all of the weights for model, without mask
+                for module in self.model.modules():
+                    if len(list(module.children())) > 0:
+                        continue
+                    for parameters in module.parameters():
+                        parameters.requires_grad = type(module) != MaskSTE
+
                 batch_size = inputs.size(0)
                 if self.use_cuda:
                     inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
@@ -307,51 +308,40 @@ class AdaptivePruningAgent(BaseAgent):
                 ).mul(self.kd_loss_reg)
                 kd_meter.update(kd_loss.data.item(), batch_size)
 
-                mask_loss = torch.zeros_like(task_loss)
-                for mask_module in self.mask_modules:
-                    mask, _ = mask_module.get_binary_mask()
-                    mask_loss += self.mask_loss_fn(mask, target=torch.zeros_like(mask))
-                mask_loss.div_(len(self.mask_modules)).mul_(self.mask_loss_reg)
-                mask_meter.update(mask_loss.data.item(), batch_size)
-
-                loss = task_loss + kd_loss + mask_loss
-                overall_loss.update(loss.data.item(), batch_size)
+                loss = task_loss + kd_loss
                 if train:
                     self.optimizer.zero_grad()
-                    loss.backward()
+                    loss.backward(retain_graph=True)
                     self.optimizer.step()
 
-                # Second Step, update the mask with respect to the budget
+                # Second Step, update the masks
                 for module in self.model.modules():
                     if len(list(module.children())) > 0:
                         continue
                     for parameters in module.parameters():
                         parameters.requires_grad = type(module) == MaskSTE
+
+                mask_loss = torch.zeros_like(task_loss)
+                for mask_module in self.mask_modules:
+                    mask, _ = mask_module.get_binary_mask()
+                    mask_loss += self.mask_loss_fn(mask, target=torch.zeros_like(mask))
+                mask_loss.div_(len(self.mask_modules)).mul_(self.mask_loss_reg).mul_(self.adaptive_difficulty)
+                mask_meter.update(mask_loss.data.item(), batch_size)
+
+                loss += mask_loss
+                overall_loss.update(loss.data.item(), batch_size)
+
+                if train:
+                    self.optimizer.zero_grad()
+                    loss.backward()
+                    self.optimizer.step()
+
                 if self.criteria == "parameters":
                     current_usage = sum(self.calculate_model_parameters()).data.item()
                 else:
                     raise NotImplementedError(
                         "Unknown criteria: {}".format(self.criteria)
                     )
-
-                # normalize over original usage value
-                admm_mask_loss = torch.zeros_like(loss)
-                for mask_module in self.mask_modules:
-                    mask, _ = mask_module.get_binary_mask()
-                    admm_mask_loss += self.mask_loss_fn(
-                        mask, target=torch.zeros_like(mask)
-                    )
-                admm_mask_loss.div_(len(self.mask_modules)).mul(self.mask_loss_reg)
-                admm_mask_loss = admm_mask_loss.mul_(
-                    self.adaptive_difficulty
-                )
-
-                admm_mask_meter.update(admm_mask_loss.data.item(), batch_size)
-
-                if train:
-                    self.optimizer.zero_grad()
-                    admm_mask_loss.backward()
-                    self.optimizer.step()
 
                 t.set_description(
                     "{mode} Epoch {epoch}/{epochs} ".format(
@@ -362,7 +352,6 @@ class AdaptivePruningAgent(BaseAgent):
                     + "Task Loss: {loss:.4f} | KD Loss: {kd:.4f} | Mask Loss: {ml:.4f} | ".format(
                         loss=task_meter.avg, kd=kd_meter.avg, ml=mask_meter.avg
                     )
-                    + "ADMM Loss {al:.4f} | ".format(al=admm_mask_meter.avg)
                     + "top1: {top1:.2f}% | ".format(top1=acc1_meter.avg)
                     + "params: {:.2e}".format(current_usage)
                 )
@@ -373,7 +362,6 @@ class AdaptivePruningAgent(BaseAgent):
             "task_loss": task_meter.avg,
             "kd_loss": kd_meter.avg,
             "mask_loss": mask_meter.avg,
-            "admm_mask_loss": admm_mask_meter.avg,
             "top1_acc": acc1_meter.avg,
             "top5_acc": acc5_meter.avg,
         }
@@ -397,12 +385,10 @@ class AdaptivePruningAgent(BaseAgent):
                 "train_task_loss": train_res["task_loss"],
                 "train_kd_loss": train_res["kd_loss"],
                 "train_mask_loss": train_res["mask_loss"],
-                "train_admm_mask_loss": train_res["admm_mask_loss"],
                 "eval_acc": eval_res["top1_acc"],
                 "eval_task_loss": eval_res["task_loss"],
                 "eval_kd_loss": eval_res["kd_loss"],
                 "eval_mask_loss": eval_res["mask_loss"],
-                "eval_admm_mask_loss": eval_res["admm_mask_loss"],
                 "lr": self.lr,
                 "elapsed_time": epoch_elapsed,
             },
@@ -414,19 +400,17 @@ class AdaptivePruningAgent(BaseAgent):
                 train_res["task_loss"],
                 train_res["kd_loss"],
                 train_res["mask_loss"],
-                train_res["admm_mask_loss"],
                 train_res["top1_acc"],
                 eval_res["task_loss"],
                 eval_res["kd_loss"],
                 eval_res["mask_loss"],
-                eval_res["admm_mask_loss"],
                 eval_res["top1_acc"],
                 self.lr,
             ]
         )
         self.logger.info(
             "FIN Epoch %(epoch)d/%(epochs)d LR: %(lr)f | "
-            + "Train Task Loss: %(ttl).4f KDL: %(tkl).4f Mask Loss: %(tml).4f ADMM Loss: %(tadm).4f Acc: %(tacc).2f | "
+            + "Train Task Loss: %(ttl).4f KDL: %(tkl).4f Mask Loss: %(tml).4f Acc: %(tacc).2f | "
             + "Eval Acc: %(eacc).2f | Params: %(params).2e | Difficulty: %(adiff).2f "
             + "Took %(dt).1fs (%(tdt).1fs)",
             {
@@ -436,7 +420,6 @@ class AdaptivePruningAgent(BaseAgent):
                 "ttl": train_res["task_loss"],
                 "tkl": train_res["kd_loss"],
                 "tml": train_res["mask_loss"],
-                "tadm": train_res["admm_mask_loss"],
                 "tacc": train_res["top1_acc"],
                 "eacc": eval_res["top1_acc"],
                 "dt": epoch_elapsed,
