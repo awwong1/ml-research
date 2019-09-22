@@ -9,7 +9,7 @@
     "budget": 4300000,
     "criteria": "parameters",
     "prune_difficulty_patience": 4,
-    "prune_reg_multiplier": 1.2,
+    "prune_reg_addition": 1.0,
     "pretrained_model": {
         "name": "models.cifar.vgg.vgg19_bn",
         "kwargs": {

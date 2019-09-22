@@ -131,12 +131,12 @@ class AdaptivePruningAgent(BaseAgent):
             )
         )
         self.prune_difficulty_patience = config.get("prune_difficulty_patience", 4)
-        self.prune_reg_multiplier = config.get("prune_reg_multiplier", 1.1)
+        self.prune_reg_addition = config.get("prune_reg_addition", 1.0)
         self.adaptive_difficulty = config.get("adaptive_difficulty_init", 1.0)
         self.logger.info(
-            "Increasing adaptive difficulty of %.2f by factor of %.2f every %d epochs with no %s decrease",
+            "Increasing adaptive difficulty of %.2f by adding %.2f every %d epochs with no %s decrease",
             self.adaptive_difficulty,
-            self.prune_reg_multiplier,
+            self.prune_reg_addition,
             self.prune_difficulty_patience,
             self.criteria,
         )
@@ -235,11 +235,12 @@ class AdaptivePruningAgent(BaseAgent):
                 if current_usage < self.patience_min_budget:
                     self.patience_min_budget = current_usage
                     self.patience_budget_counter = 0
+                    self.adaptive_difficulty = self.config.get("adaptive_difficulty_init", 1.0)
                 else:
                     self.patience_budget_counter += 1
                 if self.patience_budget_counter >= self.prune_difficulty_patience:
                     self.patience_budget_counter = 0
-                    self.adaptive_difficulty *= self.prune_reg_multiplier
+                    self.adaptive_difficulty += self.prune_reg_addition
                     self.logger.info(
                         "Increasing adaptive difficuly to %.2f due to no param reduction over %d epochs",
                         self.adaptive_difficulty,
