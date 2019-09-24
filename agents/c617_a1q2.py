@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
+import os
 import torch
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from time import time
 from torchvision.transforms import (
     Compose,
@@ -14,6 +15,9 @@ from torchvision.transforms import (
 )
 from torchvision.datasets import ImageFolder
 from skimage.transform import pyramid_gaussian
+from math import ceil
+from glob import glob
+from collections import Counter
 
 from .base import BaseAgent
 from util.accuracy import calculate_accuracy
@@ -51,13 +55,12 @@ class MultiResolutionModelWrapper(torch.nn.Module):
     """Wrapper model for handling multiple resolution images
     """
 
-    def __init__(self, base_model, num_resolutions=3):
+    def __init__(self, base_model, num_resolutions=3, base_out_size=300):
         super(MultiResolutionModelWrapper, self).__init__()
         self.num_resolutions = num_resolutions
         self.base_model = base_model
         self.dim_learner = torch.nn.Sequential(
-            torch.nn.Tanh(),
-            torch.nn.Linear(2 * num_resolutions, 2)
+            torch.nn.Tanh(), torch.nn.Linear(base_out_size * num_resolutions, 2)
         )
 
     def forward(self, multi_x):
@@ -68,7 +71,9 @@ class MultiResolutionModelWrapper(torch.nn.Module):
         W: width
         """
         res_preds = []
-        assert self.num_resolutions == len(multi_x), "mismatched number of image resolutions"
+        assert self.num_resolutions == len(
+            multi_x
+        ), "mismatched number of image resolutions"
         for x in multi_x:
             res_pred = self.base_model(x)
             res_preds.append(res_pred)
@@ -100,31 +105,37 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
         # Instantiate Datasets and Dataloaders
         # self.train_set, self.train_loader = init_data(config.get("train_data"))
         # self.eval_set, self.eval_loader = init_data(config.get("eval_data"))
-        base_transforms = [
-            ToTensor(),
-            Normalize(
-                [0.6705237030982971, 0.6573456525802612, 0.6612830758094788],
-                [0.19618913531303406, 0.22384527325630188, 0.23168295621871948],
+        ds = ImageFolder(
+            "data/c617a1/train_eval",
+            transform=Compose(
+                [
+                    RandomHorizontalFlip(),
+                    ToTensor(),
+                    Normalize(
+                        [0.663295328617096, 0.6501832604408264, 0.6542291045188904],
+                        [0.19360290467739105, 0.22194330394268036, 0.23059576749801636],
+                    ),
+                    Lambda(expand_multires),
+                ]
             ),
-            Lambda(expand_multires),
-        ]
-        self.train_set = ImageFolder(
-            "data/c617a1/train",
-            transform=Compose([RandomHorizontalFlip()] + base_transforms),
         )
+        train_set_ratio, eval_set_ratio = config.get(
+            "train_eval_split_ratio", [0.85, 0.15]
+        )
+        train_len = ceil(len(ds) * train_set_ratio)
+        eval_len = len(ds) - train_len
+        self.train_set, self.eval_set = random_split(ds, [train_len, eval_len])
         self.train_loader = DataLoader(
             self.train_set,
             num_workers=config.get("num_workers", 0),
             batch_size=config.get("batch_size", 128),
-            shuffle=True,
-        )
-        self.eval_set = ImageFolder(
-            "data/c617a1/eval", transform=Compose(base_transforms)
+            shuffle=True
         )
         self.eval_loader = DataLoader(
-            self.eval_set,
+            self.eval_set, 
             num_workers=config.get("num_workers", 0),
             batch_size=config.get("batch_size", 128),
+            shuffle=True
         )
 
         # Instantiate Model
@@ -134,11 +145,11 @@ class MultiResolutionFineTuneClassifier(BaseAgent):
             param.requires_grad = False
 
         # manually convert pretrained model into a binary classification problem
+        base_out_size = 300
         base_model.classifier = torch.nn.Sequential(
-            torch.nn.Dropout(p=0.2, inplace=True),
-            torch.nn.Linear(1280, 2)
+            torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, base_out_size)
         )
-        self.model = MultiResolutionModelWrapper(base_model, )
+        self.model = MultiResolutionModelWrapper(base_model, base_out_size=base_out_size)
 
         # Instantiate task loss and optimizer
         self.task_loss_fn = init_class(config.get("task_loss"))
@@ -334,8 +345,8 @@ class TestSetEvaluator(BaseAgent):
         base_transforms = [
             ToTensor(),
             Normalize(
-                [0.6705237030982971, 0.6573456525802612, 0.6612830758094788],
-                [0.19618913531303406, 0.22384527325630188, 0.23168295621871948],
+                [0.663295328617096, 0.6501832604408264, 0.6542291045188904],
+                [0.19360290467739105, 0.22194330394268036, 0.23059576749801636],
             ),
             Lambda(expand_multires),
         ]
@@ -345,17 +356,18 @@ class TestSetEvaluator(BaseAgent):
         self.test_loader = DataLoader(
             self.test_set,
             num_workers=config.get("num_workers", 0),
-            batch_size=config.get("batch_size", 128),
+            batch_size=config.get("batch_size", 1),
             shuffle=True,
         )
 
         # Instantiate Model
         base_model = init_class(config.get("model"))
         # manually convert pretrained model into a binary classification problem
+        base_out_size = 300
         base_model.classifier = torch.nn.Sequential(
-            torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, 2)
+            torch.nn.Dropout(p=0.2, inplace=True), torch.nn.Linear(1280, base_out_size)
         )
-        self.model = MultiResolutionModelWrapper(base_model)
+        self.model = MultiResolutionModelWrapper(base_model, base_out_size=base_out_size)
 
         self.logger.info("Test Dataset: %s", self.test_set)
         self.checkpoints = config.get("checkpoints")
@@ -383,6 +395,8 @@ class TestSetEvaluator(BaseAgent):
             self.model.eval()
 
             t = tqdm(self.test_loader)
+            test_accuracies = []
+
             for inputs, targets in t:
                 batch_size = inputs[0].size(0)
                 if self.use_cuda:
@@ -395,9 +409,30 @@ class TestSetEvaluator(BaseAgent):
                 # Record task loss and accuracies
                 prec1, = calculate_accuracy(outputs.data, targets.data)
                 acc1_meter.update(prec1.item(), batch_size)
+                test_accuracies.append(prec1.item())
 
                 t.set_description("Test Acc: {top1:.2f}%".format(top1=acc1_meter.avg))
             self.logger.info("Test Acc: %.2f", acc1_meter.avg)
+
+            self.logger.info("Avg Test Tile Acc: %.2f", acc1_meter.avg)
+            file_names = list(glob(os.path.join("data/c617a1/test", "**", "*.png")))
+            assert len(test_accuracies) == len(
+                file_names
+            ), "accuracy length does not match files"
+            base_file_names = [fname.rsplit("-", 1)[-1] for fname in file_names]
+            img_accuracies = {}
+            for base_name, accuracy in zip(base_file_names, test_accuracies):
+                img_acc = img_accuracies.get(base_name, [])
+                img_acc.append(accuracy)
+                img_accuracies[base_name] = img_acc
+
+            for key, value in img_accuracies.items():
+                self.logger.info(
+                    "%s: %.2f [%s]",
+                    key,
+                    float(sum(value)) / len(value),
+                    str(Counter(value)),
+                )
 
     def finalize(self):
         self.tb_sw.close()

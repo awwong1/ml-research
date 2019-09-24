@@ -6,18 +6,7 @@
         {
             "name": "torchvision.datasets.ImageFolder",
             "args": [
-                "data/c617a1/train"
-            ],
-            "transform": [
-                {
-                    "name": "torchvision.transforms.ToTensor"
-                }
-            ]
-        },
-        {
-            "name": "torchvision.datasets.ImageFolder",
-            "args": [
-                "data/c617a1/eval"
+                "data/c617a1/train_eval"
             ],
             "transform": [
                 {
