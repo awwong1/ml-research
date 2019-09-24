@@ -547,14 +547,14 @@ class TestSetEvaluator(BaseAgent):
             assert len(accuracies) == len(
                 file_names
             ), "accuracy length does not match files"
-            base_file_names = [fname.rsplit("-", 1) for fname in file_names]
+            base_file_names = [fname.rsplit("-", 1)[-1] for fname in file_names]
             img_accuracies = {}
             for base_name, accuracy in zip(base_file_names, accuracies):
                 img_acc = img_accuracies.get(base_name, [])
                 img_acc.append(accuracy)
                 img_accuracies[base_name] = img_acc
             for key, value in img_accuracies.items():
-                self.logger.info("%s: %.2f".format(float(sum(value)) / len(value)))
+                self.logger.info("%s: %.2f", key, float(sum(value)) / len(value))
 
     def finalize(self):
         self.tb_sw.close()
