@@ -97,8 +97,8 @@ class AdaptivePruningAgent(BaseAgent):
         # Misc. Other classification hyperparameters
         self.epochs = config.get("epochs", 300)
         self.start_epoch = config.get("start_epoch", 0)
-        self.gamma = config.get("gamma", 0.1)
-        self.schedule = config.get("schedule", 30)
+        self.gamma = config.get("gamma", 1)
+        self.schedule = config.get("schedule", 0)
         self.lr = self.optimizer.param_groups[0]["lr"]
         self.best_acc_per_usage = {}
 
@@ -173,7 +173,7 @@ class AdaptivePruningAgent(BaseAgent):
             self.logger.info(pformat(self.best_acc_per_usage))
             # fastforward LR to match current schedule
             for i in range(self.start_epoch):
-                if i > 0 and i % self.schedule == 0:
+                if self.schedule and i > 0 and i % self.schedule == 0:
                     new_lr = self.lr * self.gamma
                     for param_group in self.optimizer.param_groups:
                         param_group["lr"] = new_lr
@@ -206,7 +206,7 @@ class AdaptivePruningAgent(BaseAgent):
         self.patience_budget_counter = 0
 
         for epoch in range(self.start_epoch, self.epochs):
-            if epoch > 0 and epoch % self.schedule == 0:
+            if self.schedule and epoch > 0 and epoch % self.schedule == 0:
                 new_lr = self.lr * self.gamma
                 for param_group in self.optimizer.param_groups:
                     param_group["lr"] = new_lr
@@ -283,7 +283,8 @@ class AdaptivePruningAgent(BaseAgent):
                     if len(list(module.children())) > 0:
                         continue
                     for parameters in module.parameters():
-                        parameters.requires_grad = type(module) != MaskSTE
+                        # parameters.requires_grad = type(module) != MaskSTE
+                        parameters.requires_grad = True
 
                 batch_size = inputs.size(0)
                 if self.use_cuda:
@@ -303,12 +304,22 @@ class AdaptivePruningAgent(BaseAgent):
                 teacher_outputs = self.pretrained_model(inputs)
                 task_loss = self.task_loss_fn(outputs, targets).mul(self.task_loss_reg)
                 task_meter.update(task_loss.data.item(), batch_size)
+
                 kd_loss = calculate_kd_loss(
                     outputs, teacher_outputs, targets, temperature=self.temperature
                 ).mul(self.kd_loss_reg)
                 kd_meter.update(kd_loss.data.item(), batch_size)
 
-                loss = task_loss + kd_loss
+                mask_loss = torch.zeros_like(task_loss)
+                for mask_module in self.mask_modules:
+                    mask, _ = mask_module.get_binary_mask()
+                    mask_loss += self.mask_loss_fn(mask, target=torch.zeros_like(mask))
+                mask_loss.div_(len(self.mask_modules)).mul_(self.mask_loss_reg).mul_(self.adaptive_difficulty)
+                mask_meter.update(mask_loss.data.item(), batch_size)
+
+                loss = task_loss + kd_loss + mask_loss
+                overall_loss.update(loss.data.item(), batch_size)
+
                 if train:
                     self.optimizer.zero_grad()
                     loss.backward(retain_graph=True)
@@ -320,16 +331,6 @@ class AdaptivePruningAgent(BaseAgent):
                         continue
                     for parameters in module.parameters():
                         parameters.requires_grad = type(module) == MaskSTE
-
-                mask_loss = torch.zeros_like(task_loss)
-                for mask_module in self.mask_modules:
-                    mask, _ = mask_module.get_binary_mask()
-                    mask_loss += self.mask_loss_fn(mask, target=torch.zeros_like(mask))
-                mask_loss.div_(len(self.mask_modules)).mul_(self.mask_loss_reg).mul_(self.adaptive_difficulty)
-                mask_meter.update(mask_loss.data.item(), batch_size)
-
-                loss += mask_loss
-                overall_loss.update(loss.data.item(), batch_size)
 
                 if train:
                     self.optimizer.zero_grad()

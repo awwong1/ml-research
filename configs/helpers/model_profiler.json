@@ -1,0 +1,45 @@
+{
+    "exp_name": "model_profiler",
+    "agent": "agents.model_profiler.ModelProfilerAgent",
+    "cpu_only": false,
+    "model": {
+        "name": "models.cifar.vgg.vgg19_bn",
+        "kwargs": {
+            "num_classes": 100
+        }
+    },
+    "eval_data": {
+        "name": "torchvision.datasets.CIFAR100",
+        "args": [
+            "data/cifar100"
+        ],
+        "kwargs": {
+            "train": false,
+            "download": true
+        },
+        "transform": [
+            {
+                "name": "torchvision.transforms.ToTensor"
+            },
+            {
+                "name": "torchvision.transforms.Normalize",
+                "args": [
+                    [
+                        0.5070757269859314,
+                        0.48655039072036743,
+                        0.4409193694591522
+                    ],
+                    [
+                        0.2673310935497284,
+                        0.2564338147640228,
+                        0.2761472463607788
+                    ]
+                ]
+            }
+        ],
+        "dataloader_kwargs": {
+            "batch_size": 256,
+            "num_workers": 8
+        }
+    }
+}
