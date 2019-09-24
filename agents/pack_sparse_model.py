@@ -40,7 +40,9 @@ class MaskablePackingAgent(BaseAgent):
                 modules, binary_masks
             )
             self.logger.info("Packed Model make_layers list: %s", make_layers_config)
-            MaskablePackingAgent.transfer_vgg_parameters(self.model, pack_model, binary_masks)
+            MaskablePackingAgent.transfer_vgg_parameters(
+                self.model, pack_model, binary_masks
+            )
             self.logger.info("Packed model: %s", pack_model)
 
             num_params = sum([p.numel() for p in pack_model.parameters()])
@@ -60,7 +62,7 @@ class MaskablePackingAgent(BaseAgent):
                 },
                 False,
                 checkpoint_dir=self.config["chkpt_dir"],
-                filename="vgg-pack-{:.2e}.pth.tar".format(num_params)
+                filename="vgg-pack-{:.2e}.pth.tar".format(num_params),
             )
         else:
             raise NotImplementedError("Cannot pack sparse module: %s", modules[0])
@@ -137,7 +139,7 @@ class MaskablePackingAgent(BaseAgent):
         return make_layers_config, pack_model
 
     @staticmethod
-    def insert_masks_into_model(model):
+    def insert_masks_into_model(model, use_cuda=False):
         make_layers_config = []
         apply_batch_norm = False
         num_classes = None
@@ -155,10 +157,14 @@ class MaskablePackingAgent(BaseAgent):
                 out_channels = module.in_features
                 num_classes = module.out_features
         model_with_masks = VGG(
-            make_layers(make_layers_config, batch_norm=apply_batch_norm, sparsity_mask=True),
+            make_layers(
+                make_layers_config, batch_norm=apply_batch_norm, sparsity_mask=True
+            ),
             num_classes=num_classes,
             classifier_input_features=out_channels,
         )
+        if use_cuda:
+            model_with_masks = model_with_masks.cuda()
         # copy over the weights
         modules_pretrained = list(model.modules())
         modules_to_prune = list(model_with_masks.modules())

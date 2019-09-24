@@ -177,10 +177,13 @@ class AdaptivePruningAgent(BaseAgent):
             epoch_start = time()
 
             # Get current usage
-            if self.criteria == "parameters":
-                pre_epoch_usage = sum(self.calculate_model_parameters()).data.item()
-            else:
-                raise NotImplementedError("Unknown criteria: {}".format(self.criteria))
+            if epoch_type == "Sparsity":
+                if self.criteria == "parameters":
+                    pre_epoch_usage = sum(self.calculate_model_parameters()).data.item()
+                else:
+                    raise NotImplementedError(
+                        "Unknown criteria: {}".format(self.criteria)
+                    )
 
             # Joint Sparsity Training
             train_res = self.run_epoch_pass(
@@ -190,9 +193,10 @@ class AdaptivePruningAgent(BaseAgent):
                 eval_res = self.run_epoch_pass(
                     epoch=epoch, train=False, epoch_type=epoch_type
                 )
-            post_epoch_usage = sum(self.calculate_model_parameters()).data.item()
 
             if epoch_type == "Sparsity":
+                post_epoch_usage = sum(self.calculate_model_parameters()).data.item()
+
                 if post_epoch_usage < pre_epoch_usage:
                     self.logger.info(
                         "%s reduced from %.2e to %.2e (diff: %d) Packing...",
@@ -235,7 +239,7 @@ class AdaptivePruningAgent(BaseAgent):
                     if fine_tune_counter >= self.short_term_fine_tune_patience:
                         # Time to learn sparsity, add in the mask layers now
                         self.model = MaskablePackingAgent.insert_masks_into_model(
-                            self.model
+                            self.model, use_cuda=self.use_cuda
                         )
                         epoch_type = "Sparsity"
                 else:
