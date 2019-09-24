@@ -36,11 +36,11 @@ class MaskablePackingAgent(BaseAgent):
             binary_masks = [
                 torch.Tensor([1, 1, 1])
             ]  # VGG Input RGB channels are not masked
-            make_layers_config, pack_model = self.gen_vgg_make_layers(
+            make_layers_config, pack_model = MaskablePackingAgent.gen_vgg_make_layers(
                 modules, binary_masks
             )
             self.logger.info("Packed Model make_layers list: %s", make_layers_config)
-            self.transfer_vgg_parameters(pack_model, binary_masks)
+            MaskablePackingAgent.transfer_vgg_parameters(self.model, pack_model, binary_masks)
             self.logger.info("Packed model: %s", pack_model)
 
             num_params = sum([p.numel() for p in pack_model.parameters()])
@@ -65,9 +65,10 @@ class MaskablePackingAgent(BaseAgent):
         else:
             raise NotImplementedError("Cannot pack sparse module: %s", modules[0])
 
-    def transfer_vgg_parameters(self, pack_model, binary_masks):
+    @staticmethod
+    def transfer_vgg_parameters(base_model, pack_model, binary_masks):
         modules_packed = list(pack_model.modules())
-        modules = list(self.model.modules())
+        modules = list(base_model.modules())
         module_idx = 0
         mask_idx = 1
         for module in modules:
@@ -106,7 +107,8 @@ class MaskablePackingAgent(BaseAgent):
                     module_packed.weight.data.copy_(module.weight[:, pre_prune])
                     module_packed.bias.data.copy_(module.bias)
 
-    def gen_vgg_make_layers(self, modules, binary_masks):
+    @staticmethod
+    def gen_vgg_make_layers(modules, binary_masks):
         make_layers_config = []
         apply_batch_norm = False
         num_classes = None
@@ -133,3 +135,49 @@ class MaskablePackingAgent(BaseAgent):
             classifier_input_features=out_channels,
         )
         return make_layers_config, pack_model
+
+    @staticmethod
+    def insert_masks_into_model(model):
+        make_layers_config = []
+        apply_batch_norm = False
+        num_classes = None
+        for idx, module in enumerate(model.modules()):
+            if len(list(module.children())) > 0:
+                continue
+            if type(module) == torch.nn.Conv2d:
+                continue
+            elif type(module) == torch.nn.BatchNorm2d:
+                apply_batch_norm = True
+            elif type(module) == torch.nn.MaxPool2d:
+                make_layers_config.append("M")
+            elif type(module) == torch.nn.Linear:
+                assert num_classes is None
+                out_channels = module.in_features
+                num_classes = module.out_features
+        model_with_masks = VGG(
+            make_layers(make_layers_config, batch_norm=apply_batch_norm, sparsity_mask=True),
+            num_classes=num_classes,
+            classifier_input_features=out_channels,
+        )
+        # copy over the weights
+        modules_pretrained = list(model.modules())
+        modules_to_prune = list(model_with_masks.modules())
+        module_idx = 0
+        for module_to_prune in modules_to_prune:
+            module_pretrained = modules_pretrained[module_idx]
+            modstr = str(type(module_to_prune))
+            # Skip the masking layers
+            if type(module_to_prune) == MaskSTE:
+                continue
+            if len(list(module_to_prune.children())) == 0:
+                assert modstr == str(type(module_pretrained))
+                # copy all parameters over
+                param_lookup = dict(module_pretrained.named_parameters())
+                for param_key, param_val in module_to_prune.named_parameters():
+                    param_val.data.copy_(param_lookup[param_key].data)
+                # BatchNorm layers are special and require copying of running_mean/running_var
+                if "BatchNorm" in modstr:
+                    module_to_prune.running_mean.copy_(module_pretrained.running_mean)
+                    module_to_prune.running_var.copy_(module_pretrained.running_var)
+            module_idx += 1
+        return model_with_masks

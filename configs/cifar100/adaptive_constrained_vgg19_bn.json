@@ -6,8 +6,8 @@
     "prune": "experiments/cifar100-vgg19_bn/checkpoints/model_best.pth.tar",
     "budget": 4300000,
     "criteria": "parameters",
-    "prune_difficulty_patience": 4,
-    "prune_reg_addition": 1.0,
+    "short_term_fine_tune_patience": 2,
+    "long_term_fine_tune_patience": 2,
     "pretrained_model": {
         "name": "models.cifar.vgg.vgg19_bn",
         "kwargs": {

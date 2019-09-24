@@ -6,7 +6,6 @@ from time import time
 from pprint import pformat
 
 from .base import BaseAgent
-from models.mask import MaskSTE
 from util.accuracy import calculate_accuracy
 from util.checkpoint import save_checkpoint
 from util.cuda import set_cuda_devices
@@ -15,10 +14,13 @@ from util.meters import AverageMeter
 from util.reflect import init_class, init_data
 from util.seed import set_seed
 from util.tablogger import TabLogger
+from models.cifar.vgg import VGG
+from models.mask import MaskSTE
+from agents.pack_sparse_model import MaskablePackingAgent
 
 
 class AdaptivePruningAgent(BaseAgent):
-    """Agent for constraineed knowledge distillation and pruning experiments."""
+    """Agent for constrained knowledge distillation and pruning experiments."""
 
     def __init__(self, config):
         super(AdaptivePruningAgent, self).__init__(config)
@@ -58,13 +60,11 @@ class AdaptivePruningAgent(BaseAgent):
         modules_pretrained = list(self.pretrained_model.modules())
         modules_to_prune = list(self.model.modules())
         module_idx = 0
-        self.mask_modules = []
         for module_to_prune in modules_to_prune:
             module_pretrained = modules_pretrained[module_idx]
             modstr = str(type(module_to_prune))
             # Skip the masking layers
-            if "MaskSTE" in modstr:
-                self.mask_modules.append(module_to_prune)
+            if type(module_to_prune) == MaskSTE:
                 continue
             if len(list(module_to_prune.children())) == 0:
                 assert modstr == str(type(module_pretrained))
@@ -98,7 +98,6 @@ class AdaptivePruningAgent(BaseAgent):
         self.epochs = config.get("epochs", 300)
         self.start_epoch = config.get("start_epoch", 0)
         self.gamma = config.get("gamma", 1)
-        self.schedule = config.get("schedule", 0)
         self.lr = self.optimizer.param_groups[0]["lr"]
         self.best_acc_per_usage = {}
 
@@ -114,10 +113,6 @@ class AdaptivePruningAgent(BaseAgent):
             "Num Parameters: %(params)d (%(lrn_params)d requires gradient)",
             {"params": num_params, "lrn_params": num_lrn_p},
         )
-        self.logger.info(
-            "LR: %(lr)f decreasing by a factor of %(gamma)f at every %(schedule)s epochs",
-            {"lr": self.lr, "gamma": self.gamma, "schedule": self.schedule},
-        )
 
         self.budget = config.get("budget", 4300000)
         self.criteria = config.get("criteria", "parameters")
@@ -130,21 +125,15 @@ class AdaptivePruningAgent(BaseAgent):
                 self.og_usage, self.criteria, self.budget, self.criteria
             )
         )
-        self.prune_difficulty_patience = config.get("prune_difficulty_patience", 4)
-        self.prune_reg_addition = config.get("prune_reg_addition", 1.0)
-        self.adaptive_difficulty = config.get("adaptive_difficulty_init", 1.0)
-        self.logger.info(
-            "Increasing adaptive difficulty of %.2f by adding %.2f every %d epochs with no %s decrease",
-            self.adaptive_difficulty,
-            self.prune_reg_addition,
-            self.prune_difficulty_patience,
-            self.criteria,
+        self.short_term_fine_tune_patience = config.get(
+            "short_term_fine_tune_patience", 2
+        )
+        self.long_term_fine_tune_patience = config.get(
+            "long_term_fine_tune_patience", 4
         )
 
-        # Path to in progress checkpoint.pth.tar for resuming experiment
-        resume = config.get("resume")
         t_log_fpath = os.path.join(config["out_dir"], "epoch.out")
-        self.t_log = TabLogger(t_log_fpath, resume=bool(resume))
+        self.t_log = TabLogger(t_log_fpath)
         self.t_log.set_names(
             [
                 "Epoch",
@@ -159,30 +148,6 @@ class AdaptivePruningAgent(BaseAgent):
                 "LR",
             ]
         )
-        if resume:
-            self.logger.info("Resuming from checkpoint: %s", resume)
-            res_chkpt = torch.load(resume, map_location=map_location)
-            self.start_epoch = res_chkpt["epoch"]
-            self.model.load_state_dict(res_chkpt["state_dict"])
-            eval_acc = res_chkpt["acc"]
-            self.best_acc_per_usage = res_chkpt["best_acc_per_usage"]
-            self.optimizer.load_state_dict(res_chkpt["optim_state_dict"])
-            self.logger.info(
-                "Resumed at epoch %d, eval acc %.2f", self.start_epoch, eval_acc
-            )
-            self.logger.info(pformat(self.best_acc_per_usage))
-            # fastforward LR to match current schedule
-            for i in range(self.start_epoch):
-                if self.schedule and i > 0 and i % self.schedule == 0:
-                    new_lr = self.lr * self.gamma
-                    for param_group in self.optimizer.param_groups:
-                        param_group["lr"] = new_lr
-
-                    self.logger.info(
-                        "LR fastforward from %(old)f to %(new)f at Epoch %(epoch)d",
-                        {"old": self.lr, "new": new_lr, "epoch": i},
-                    )
-                    self.lr = new_lr
 
         self.logger.info(
             "Training from Epoch %(start)d to %(end)d",
@@ -202,70 +167,96 @@ class AdaptivePruningAgent(BaseAgent):
 
     def run(self):
         self.exp_start = time()
-        self.patience_min_budget = self.og_usage
-        self.patience_budget_counter = 0
+
+        epoch_type = "Sparsity"  # FineTune
+        best_tune_eval_acc = 0
+        fine_tune_counter = 0
+        budget_acheived = False
 
         for epoch in range(self.start_epoch, self.epochs):
-            if self.schedule and epoch > 0 and epoch % self.schedule == 0:
-                new_lr = self.lr * self.gamma
-                for param_group in self.optimizer.param_groups:
-                    param_group["lr"] = new_lr
-
-                self.logger.info(
-                    "LR changed from %(old)f to %(new)f at Epoch %(epoch)d",
-                    {"old": self.lr, "new": new_lr, "epoch": epoch},
-                )
-                self.lr = new_lr
-
             epoch_start = time()
-            train_res = self.run_epoch_pass(epoch=epoch, train=True)
-            with torch.no_grad():
-                eval_res = self.run_epoch_pass(epoch=epoch, train=False)
-            epoch_elapsed = time() - epoch_start
 
-            self.log_epoch_info(epoch, train_res, eval_res, epoch_elapsed)
-
-            # Check if budget has been reached
+            # Get current usage
             if self.criteria == "parameters":
-                current_usage = sum(self.calculate_model_parameters()).data.item()
-                budget_residual = current_usage - self.budget
-                # Calculate adaptive difficulty change
-                if current_usage < self.patience_min_budget:
-                    self.patience_min_budget = current_usage
-                    self.patience_budget_counter = 0
-                    self.adaptive_difficulty = self.config.get("adaptive_difficulty_init", 1.0)
-                else:
-                    self.patience_budget_counter += 1
-                if self.patience_budget_counter >= self.prune_difficulty_patience:
-                    self.patience_budget_counter = 0
-                    self.adaptive_difficulty += self.prune_reg_addition
-                    self.logger.info(
-                        "Increasing adaptive difficuly to %.2f due to no param reduction over %d epochs",
-                        self.adaptive_difficulty,
-                        self.prune_difficulty_patience,
-                    )
+                pre_epoch_usage = sum(self.calculate_model_parameters()).data.item()
             else:
                 raise NotImplementedError("Unknown criteria: {}".format(self.criteria))
 
-            if budget_residual <= 0:
+            # Joint Sparsity Training
+            train_res = self.run_epoch_pass(
+                epoch=epoch, train=True, epoch_type=epoch_type
+            )
+            with torch.no_grad():
+                eval_res = self.run_epoch_pass(
+                    epoch=epoch, train=False, epoch_type=epoch_type
+                )
+            post_epoch_usage = sum(self.calculate_model_parameters()).data.item()
+
+            if epoch_type == "Sparsity":
+                if post_epoch_usage < pre_epoch_usage:
+                    self.logger.info(
+                        "%s reduced from %.2e to %.2e (diff: %d) Packing...",
+                        self.criteria,
+                        pre_epoch_usage,
+                        post_epoch_usage,
+                        pre_epoch_usage - post_epoch_usage,
+                    )
+                    # time to pack, transfer weights, and short term fine tune
+                    modules = list(self.model.modules())
+                    if type(modules[0]) == VGG:
+                        binary_masks = [torch.tensor([1, 1, 1])]
+                        make_layers_config, pack_model = MaskablePackingAgent.gen_vgg_make_layers(
+                            modules, binary_masks
+                        )
+                        self.logger.info(
+                            "New VGG configuration: %s", make_layers_config
+                        )
+                        MaskablePackingAgent.transfer_vgg_parameters(
+                            self.model, pack_model, binary_masks
+                        )
+                        self.make_layers_config = make_layers_config
+                        self.model = pack_model
+                        epoch_type = "FineTune"
+                        best_tune_eval_acc = eval_res["top1_acc"]
+                        fine_tune_counter = 0
+                    else:
+                        raise NotImplementedError(
+                            "Cannot pack sparse module: %s", modules[0]
+                        )
+            elif epoch_type == "FineTune":
+                cur_eval_acc = eval_res["top1_acc"]
+                if cur_eval_acc > best_tune_eval_acc:
+                    fine_tune_counter = 0
+                    best_tune_eval_acc = cur_eval_acc
+                else:
+                    fine_tune_counter += 1
+
+                if post_epoch_usage <= self.budget:
+                    if fine_tune_counter >= self.short_term_fine_tune_patience:
+                        # Time to learn sparsity, add in the mask layers now
+                        self.model = MaskablePackingAgent.insert_masks_into_model(
+                            self.model
+                        )
+                        epoch_type = "Sparsity"
+                else:
+                    if fine_tune_counter >= self.long_term_fine_tune_patience:
+                        budget_acheived = True
+
+            epoch_elapsed = time() - epoch_start
+
+            self.log_epoch_info(epoch, train_res, eval_res, epoch_type, epoch_elapsed)
+            if budget_acheived:
                 self.logger.info(
-                    "Budget of %.2e %s reached! At %.2e %s",
+                    "Budget %.2e %s acheived at %.2e %s (%d less)",
                     self.budget,
                     self.criteria,
-                    current_usage,
+                    post_epoch_usage,
                     self.criteria,
+                    self.budget - post_epoch_usage,
                 )
                 break
-        else:
-            self.logger.info(
-                "Could not reach budget of %.2e %s, at %.2e %s",
-                self.budget,
-                self.criteria,
-                current_usage,
-                self.criteria,
-            )
 
-    def run_epoch_pass(self, epoch=-1, train=True):
+    def run_epoch_pass(self, epoch=-1, train=True, epoch_type="Sparsity"):
         overall_loss = AverageMeter("Overall Loss")
         mask_meter = AverageMeter("Mask Loss")
         task_meter = AverageMeter("Task Loss")
@@ -278,14 +269,6 @@ class AdaptivePruningAgent(BaseAgent):
 
         with tqdm(total=len(dataloader)) as t:
             for inputs, targets in dataloader:
-                # First Step, update all of the weights for model, without mask
-                for module in self.model.modules():
-                    if len(list(module.children())) > 0:
-                        continue
-                    for parameters in module.parameters():
-                        # parameters.requires_grad = type(module) != MaskSTE
-                        parameters.requires_grad = True
-
                 batch_size = inputs.size(0)
                 if self.use_cuda:
                     inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
@@ -304,57 +287,44 @@ class AdaptivePruningAgent(BaseAgent):
                 teacher_outputs = self.pretrained_model(inputs)
                 task_loss = self.task_loss_fn(outputs, targets).mul(self.task_loss_reg)
                 task_meter.update(task_loss.data.item(), batch_size)
-
                 kd_loss = calculate_kd_loss(
                     outputs, teacher_outputs, targets, temperature=self.temperature
                 ).mul(self.kd_loss_reg)
                 kd_meter.update(kd_loss.data.item(), batch_size)
 
                 mask_loss = torch.zeros_like(task_loss)
-                for mask_module in self.mask_modules:
-                    mask, _ = mask_module.get_binary_mask()
-                    mask_loss += self.mask_loss_fn(mask, target=torch.zeros_like(mask))
-                mask_loss.div_(len(self.mask_modules)).mul_(self.mask_loss_reg).mul_(self.adaptive_difficulty)
+                num_masks = 0
+                for module in self.model.modules():
+                    if type(module) == MaskSTE:
+                        num_masks += 1
+                        mask, _ = module.get_binary_mask()
+                        mask_loss += self.mask_loss_fn(
+                            mask, target=torch.zeros_like(mask)
+                        )
+                if num_masks > 0:
+                    mask_loss.div_(num_masks).mul_(self.mask_loss_reg)
                 mask_meter.update(mask_loss.data.item(), batch_size)
 
                 loss = task_loss + kd_loss + mask_loss
                 overall_loss.update(loss.data.item(), batch_size)
-
-                if train:
-                    self.optimizer.zero_grad()
-                    loss.backward(retain_graph=True)
-                    self.optimizer.step()
-
-                # Second Step, update the masks
-                for module in self.model.modules():
-                    if len(list(module.children())) > 0:
-                        continue
-                    for parameters in module.parameters():
-                        parameters.requires_grad = type(module) == MaskSTE
-
                 if train:
                     self.optimizer.zero_grad()
                     loss.backward()
                     self.optimizer.step()
 
-                if self.criteria == "parameters":
-                    current_usage = sum(self.calculate_model_parameters()).data.item()
-                else:
-                    raise NotImplementedError(
-                        "Unknown criteria: {}".format(self.criteria)
-                    )
-
                 t.set_description(
-                    "{mode} Epoch {epoch}/{epochs} ".format(
+                    "{epoch_type} {mode} Epoch {epoch}/{epochs} ".format(
+                        epoch_type=epoch_type,
                         mode="Train" if train else "Eval",
                         epoch=epoch,
                         epochs=self.epochs,
                     )
-                    + "Task Loss: {loss:.4f} | KD Loss: {kd:.4f} | Mask Loss: {ml:.4f} | ".format(
+                    + "Task Loss: {loss:.4f} | KD Loss: {kd:.4f} | Mask Loss: {ml:.4f} ".format(
                         loss=task_meter.avg, kd=kd_meter.avg, ml=mask_meter.avg
                     )
-                    + "top1: {top1:.2f}% | ".format(top1=acc1_meter.avg)
-                    + "params: {:.2e}".format(current_usage)
+                    + "top1: {top1:.2f}% | top5: {top5:.2f}%".format(
+                        top1=acc1_meter.avg, top5=acc5_meter.avg
+                    )
                 )
                 t.update()
 
@@ -367,14 +337,18 @@ class AdaptivePruningAgent(BaseAgent):
             "top5_acc": acc5_meter.avg,
         }
 
-    def log_epoch_info(self, epoch, train_res, eval_res, epoch_elapsed):
+    def log_epoch_info(self, epoch, train_res, eval_res, epoch_type, epoch_elapsed):
         param_usage = 0
         epoch_sparsity = {}
-        for idx, mask_module in enumerate(self.mask_modules):
-            mask, factor = mask_module.get_binary_mask()
-            mask_sparsity = sum(mask.view(-1))
-            param_usage += sum(mask.view(-1) * factor)
-            epoch_sparsity["{:02d}".format(idx)] = mask_sparsity
+
+        mask_idx = 0
+        for module in self.model.modules():
+            if type(module) == MaskSTE:
+                mask, factor = module.get_binary_mask()
+                mask_sparsity = sum(mask.view(-1))
+                param_usage += sum(mask.view(-1) * factor)
+                epoch_sparsity["{:02d}".format(mask_idx)] = mask_sparsity
+                mask_idx += 1
 
         self.tb_sw.add_scalars("epoch_sparsity", epoch_sparsity, global_step=epoch)
         self.tb_sw.add_scalar("epoch_params", param_usage, global_step=epoch)
@@ -410,11 +384,12 @@ class AdaptivePruningAgent(BaseAgent):
             ]
         )
         self.logger.info(
-            "FIN Epoch %(epoch)d/%(epochs)d LR: %(lr)f | "
+            "FIN %(epoch_type)s Epoch %(epoch)d/%(epochs)d LR: %(lr)f | "
             + "Train Task Loss: %(ttl).4f KDL: %(tkl).4f Mask Loss: %(tml).4f Acc: %(tacc).2f | "
-            + "Eval Acc: %(eacc).2f | Params: %(params).2e | Difficulty: %(adiff).2f "
+            + "Eval Acc: %(eacc).2f | Params: %(params).2e | "
             + "Took %(dt).1fs (%(tdt).1fs)",
             {
+                "epoch_type": epoch_type,
                 "epoch": epoch,
                 "epochs": self.epochs,
                 "lr": self.lr,
@@ -425,7 +400,6 @@ class AdaptivePruningAgent(BaseAgent):
                 "eacc": eval_res["top1_acc"],
                 "dt": epoch_elapsed,
                 "params": param_usage,
-                "adiff": self.adaptive_difficulty,
                 "tdt": time() - self.exp_start,
             },
         )
