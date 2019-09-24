@@ -227,8 +227,12 @@ class FineTuneClassifier(BaseAgent):
         train_len = ceil(len(ds) * train_set_ratio)
         eval_len = len(ds) - train_len
         self.train_set, self.eval_set = random_split(ds, [train_len, eval_len])
-        self.train_loader = DataLoader(self.train_set, **train_eval_config.get("dataloader_kwargs", {}))
-        self.eval_loader = DataLoader(self.eval_set, **train_eval_config.get("dataloader_kwargs", {}))
+        self.train_loader = DataLoader(
+            self.train_set, **train_eval_config.get("dataloader_kwargs", {})
+        )
+        self.eval_loader = DataLoader(
+            self.eval_set, **train_eval_config.get("dataloader_kwargs", {})
+        )
 
         # Instantiate Model
         self.model = init_class(config.get("model"))
@@ -423,7 +427,7 @@ class FineTuneClassifier(BaseAgent):
                 train_res["top1_acc"],
                 eval_res["task_loss"],
                 eval_res["top1_acc"],
-                self.lr
+                self.lr,
             ]
         )
         self.logger.info(
@@ -522,6 +526,7 @@ class TestSetEvaluator(BaseAgent):
             self.model.eval()
 
             t = tqdm(self.test_loader)
+            accuracies = []
             for inputs, targets in t:
                 batch_size = inputs.size(0)
                 if self.use_cuda:
@@ -533,9 +538,23 @@ class TestSetEvaluator(BaseAgent):
                 # Record task loss and accuracies
                 prec1, = calculate_accuracy(outputs.data, targets.data)
                 acc1_meter.update(prec1.item(), batch_size)
+                accuracies.append(prec1.item())
 
                 t.set_description("Test Acc: {top1:.2f}%".format(top1=acc1_meter.avg))
-            self.logger.info("Test Acc: %.2f", acc1_meter.avg)
+            self.logger.info("Avg Test Tile Acc: %.2f", acc1_meter.avg)
+            img_path = self.config.get("test_data", {}).get("args", [])[0]
+            file_names = list(glob(os.path.join(img_path, "**", "*.png")))
+            assert len(accuracies) == len(
+                file_names
+            ), "accuracy length does not match files"
+            base_file_names = [fname.rsplit("-", 1) for fname in file_names]
+            img_accuracies = {}
+            for base_name, accuracy in zip(base_file_names, accuracies):
+                img_acc = img_accuracies.get(base_name, [])
+                img_acc.append(accuracy)
+                img_accuracies[base_name] = img_acc
+            for key, value in img_accuracies.items():
+                self.logger.info("%s: %.2f".format(float(sum(value)) / len(value)))
 
     def finalize(self):
         self.tb_sw.close()
