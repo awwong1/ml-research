@@ -528,7 +528,6 @@ class TestSetEvaluator(BaseAgent):
 
             t = tqdm(self.test_loader)
             test_accuracies = []
-            test_outputs = []
             for inputs, targets in t:
                 batch_size = inputs.size(0)
                 if self.use_cuda:
@@ -541,7 +540,6 @@ class TestSetEvaluator(BaseAgent):
                 prec1, = calculate_accuracy(outputs.data, targets.data)
                 acc1_meter.update(prec1.item(), batch_size)
                 test_accuracies.append(prec1.item())
-                test_outputs.append(outputs.data.item())
 
                 t.set_description("Test Acc: {top1:.2f}%".format(top1=acc1_meter.avg))
             self.logger.info("Avg Test Tile Acc: %.2f", acc1_meter.avg)
@@ -552,19 +550,18 @@ class TestSetEvaluator(BaseAgent):
             ), "accuracy length does not match files"
             base_file_names = [fname.rsplit("-", 1)[-1] for fname in file_names]
             img_accuracies = {}
-            img_outputs = {}
-            for base_name, accuracy, output in zip(base_file_names, test_accuracies, test_outputs):
+            for base_name, accuracy in zip(base_file_names, test_accuracies):
                 img_acc = img_accuracies.get(base_name, [])
                 img_acc.append(accuracy)
                 img_accuracies[base_name] = img_acc
 
-                img_out = img_outputs.get(base_name, [])
-                img_out.append(output)
-                img_outputs[base_name] = img_out
-
             for key, value in img_accuracies.items():
-                self.logger.info("%s: %.2f", key, float(sum(value)) / len(value))
-                self.logger.info(Counter(img_outputs[key]))
+                self.logger.info(
+                    "%s: %.2f [%s]",
+                    key,
+                    float(sum(value)) / len(value),
+                    str(Counter(value)),
+                )
 
     def finalize(self):
         self.tb_sw.close()
