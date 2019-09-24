@@ -210,7 +210,7 @@ class AdaptivePruningAgent(BaseAgent):
                     if type(modules[0]) == VGG:
                         binary_masks = [torch.tensor([1, 1, 1])]
                         make_layers_config, pack_model = MaskablePackingAgent.gen_vgg_make_layers(
-                            modules, binary_masks
+                            modules, binary_masks, use_cuda=self.use_cuda
                         )
                         self.logger.info(
                             "New VGG configuration: %s", make_layers_config

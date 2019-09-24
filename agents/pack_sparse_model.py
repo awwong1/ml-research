@@ -110,7 +110,7 @@ class MaskablePackingAgent(BaseAgent):
                     module_packed.bias.data.copy_(module.bias)
 
     @staticmethod
-    def gen_vgg_make_layers(modules, binary_masks):
+    def gen_vgg_make_layers(modules, binary_masks, use_cuda=False):
         make_layers_config = []
         apply_batch_norm = False
         num_classes = None
@@ -136,6 +136,8 @@ class MaskablePackingAgent(BaseAgent):
             num_classes=num_classes,
             classifier_input_features=out_channels,
         )
+        if use_cuda:
+            pack_model = pack_model.cuda()
         return make_layers_config, pack_model
 
     @staticmethod
