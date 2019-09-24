@@ -226,8 +226,8 @@ class FineTuneClassifier(BaseAgent):
         train_len = ceil(len(ds) * train_set_ratio)
         eval_len = len(ds) - train_len
         self.train_set, self.eval_set = random_split(ds, [train_len, eval_len])
-        self.train_loader = DataLoader(self.train_set, **train_set_ratio.get("dataloader_kwargs", {}))
-        self.eval_loader = DataLoader(self.eval_set, **train_set_ratio.get("dataloader_kwargs", {}))
+        self.train_loader = DataLoader(self.train_set, **train_eval_config.get("dataloader_kwargs", {}))
+        self.eval_loader = DataLoader(self.eval_set, **train_eval_config.get("dataloader_kwargs", {}))
 
         # Instantiate Model
         self.model = init_class(config.get("model"))
