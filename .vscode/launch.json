@@ -49,6 +49,16 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Python: CMPUT617A1Q1 Preprocess",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "args": [
+                "configs/cmput617/a1q1_preprocess.json",
+            ],
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Python: CMPUT617A1Q1 FineTune",
             "type": "python",
             "request": "launch",

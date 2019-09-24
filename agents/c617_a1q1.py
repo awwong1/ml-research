@@ -7,6 +7,8 @@ from PIL import Image
 from tqdm import tqdm
 from math import ceil
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import DataLoader, random_split
+from torchvision.transforms import Compose
 from time import time
 
 from .base import BaseAgent
@@ -15,7 +17,7 @@ from util.adjust import adjust_learning_rate
 from util.checkpoint import save_checkpoint
 from util.cuda import set_cuda_devices
 from util.meters import AverageMeter
-from util.reflect import init_class, init_data
+from util.reflect import init_class, fetch_class
 from util.seed import set_seed
 
 
@@ -26,14 +28,44 @@ class PreprocessTileImage(BaseAgent):
         self.tile_height = config.get("tile_height", 256)
         self.input_glob = config.get("input_glob", "data/c617a1raw/Pictures/*.tif")
         self.output_dir = config.get("output_dir", "data/c617a1")
-        self.train_ratio = config.get("train_ratio", 0.7)
-        self.eval_ratio = config.get("eval_ratio", 0.2)
+        self.train_ratio = config.get("train_ratio", 0.8)
+        self.eval_ratio = config.get("eval_ratio", 0.1)
         self.test_ratio = config.get("test_ratio", 0.1)
 
         os.makedirs(os.path.join(self.output_dir, "pos"), exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, "neg"), exist_ok=True)
 
     def run(self):
+        out_glob = os.path.join(self.output_dir, "**", "*.png")
+        if len(set(glob(out_glob))):
+            self.logger.info("out glob exists, skipping raw image tiling")
+        else:
+            self.tile_all_images()
+        self.partition_datasets()
+        # log the number of train/eval and test image tiles
+        train_eval_pos = list(
+            glob(os.path.join(self.output_dir, "train_eval", "pos", "*.png"))
+        )
+        train_eval_neg = list(
+            glob(os.path.join(self.output_dir, "train_eval", "neg", "*.png"))
+        )
+        test_pos = list(glob(os.path.join(self.output_dir, "test", "pos", "*.png")))
+        test_neg = list(glob(os.path.join(self.output_dir, "test", "neg", "*.png")))
+        self.logger.info("test: [pos %d, neg %d]", len(test_pos), len(test_neg))
+        self.logger.info(
+            "train_eval: [pos %d, neg %d]", len(train_eval_pos), len(train_eval_neg)
+        )
+        train_multiplier = self.train_ratio + (self.test_ratio / 2)
+        train_pos = ceil(len(train_eval_pos) * train_multiplier)
+        train_neg = ceil(len(train_eval_neg) * train_multiplier)
+        self.logger.info("train: [pos %d, neg %d]", train_pos, train_neg)
+        self.logger.info(
+            "eval: [pos %d, neg %d]",
+            len(train_eval_pos) - train_pos,
+            len(train_eval_neg) - train_neg,
+        )
+
+    def tile_all_images(self):
         # Iterate through all the input images
         for infile in tqdm(glob(self.input_glob)):
             filename, ext = os.path.splitext(infile)
@@ -72,97 +104,83 @@ class PreprocessTileImage(BaseAgent):
                         pbar.set_description(tile_outfile)
                         pbar.update()
 
+    def partition_datasets(self):
+        # test set needs to contain whole images
+        # split the dataset of pictures into training/evaluation/test sets
+        all_images = set(glob(self.input_glob))
+        num_train_images = ceil(len(all_images) * self.train_ratio)
+        num_eval_images = ceil(len(all_images) * self.eval_ratio)
+        num_test_images = len(all_images) - num_train_images - num_eval_images
+
+        # split out the test images
+        while True:
+            test_images = random.sample(all_images, num_test_images)
+            test_pos_images = [img for img in test_images if "pos" in img]
+            test_neg_images = [img for img in test_images if "neg" in img]
+            if len(test_pos_images) == 5 and len(test_neg_images) == 5:
+                break
+                # all_images.difference_update(test_images)
+        self.logger.info("test images (pos): %s", ", ".join(test_pos_images))
+        self.logger.info("test images (neg): %s", ", ".join(test_neg_images))
+
         # symlink the training, validation, and test sets according to ratios
         pos_glob = os.path.join(self.output_dir, "pos") + "/*.png"
         neg_glob = os.path.join(self.output_dir, "neg") + "/*.png"
 
-        self.logger.info(pos_glob)
-        self.logger.info(neg_glob)
-        pos_images = set(glob(pos_glob))
-        neg_images = set(glob(neg_glob))
-
-        train_pos_len = ceil(len(pos_images) * self.train_ratio)
-        eval_pos_len = ceil(len(pos_images) * self.eval_ratio)
-        test_pos_len = len(pos_images) - train_pos_len - eval_pos_len
-        self.logger.info(
-            "pos train %d | eval %d | test %d | total %d ",
-            train_pos_len,
-            eval_pos_len,
-            test_pos_len,
-            len(pos_images),
-        )
-
-        train_neg_len = ceil(len(neg_images) * self.train_ratio)
-        eval_neg_len = ceil(len(neg_images) * self.eval_ratio)
-        test_neg_len = len(neg_images) - train_neg_len - eval_neg_len
-        self.logger.info(
-            "neg train %d | eval %d | test %d | total %d ",
-            train_neg_len,
-            eval_neg_len,
-            test_neg_len,
-            len(neg_images),
-        )
-
         # make directories
-        os.makedirs(os.path.join(self.output_dir, "train", "pos"), exist_ok=True)
-        os.makedirs(os.path.join(self.output_dir, "train", "neg"), exist_ok=True)
-        os.makedirs(os.path.join(self.output_dir, "eval", "pos"), exist_ok=True)
-        os.makedirs(os.path.join(self.output_dir, "eval", "neg"), exist_ok=True)
+        os.makedirs(os.path.join(self.output_dir, "train_eval", "pos"), exist_ok=True)
+        os.makedirs(os.path.join(self.output_dir, "train_eval", "neg"), exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, "test", "pos"), exist_ok=True)
         os.makedirs(os.path.join(self.output_dir, "test", "neg"), exist_ok=True)
 
-        train_pos_images = random.sample(pos_images, train_pos_len)
-        pos_images.difference_update(train_pos_images)
-        eval_pos_images = random.sample(pos_images, eval_pos_len)
-        pos_images.difference_update(eval_pos_images)
-        test_pos_images = random.sample(pos_images, test_pos_len)
-        pos_images.difference_update(test_pos_images)
-        assert len(pos_images) == 0
-
-        train_neg_images = random.sample(neg_images, train_neg_len)
-        neg_images.difference_update(train_neg_images)
-        eval_neg_images = random.sample(neg_images, eval_neg_len)
-        neg_images.difference_update(eval_neg_images)
-        test_neg_images = random.sample(neg_images, test_neg_len)
-        neg_images.difference_update(test_neg_images)
-        assert len(neg_images) == 0
-
-        for img in train_pos_images:
-            basename = os.path.basename(img)
-            os.symlink(
-                os.path.abspath(os.path.join(self.output_dir, "pos", basename)),
-                os.path.join(self.output_dir, "train", "pos", basename),
+        pos_test_basenames = [
+            os.path.basename(os.path.splitext(test_img)[0])
+            for test_img in test_pos_images
+        ]
+        for infile in tqdm(glob(pos_glob)):
+            filename, ext = os.path.splitext(infile)
+            basename = os.path.basename(infile)
+            is_test_img = (
+                len(
+                    [
+                        test_img
+                        for test_img in pos_test_basenames
+                        if basename.endswith("-{}.png".format(test_img))
+                    ]
+                )
+                > 0
             )
-        for img in eval_pos_images:
-            basename = os.path.basename(img)
+            if is_test_img:
+                sym_out = os.path.join(self.output_dir, "test", "pos", basename)
+            else:
+                sym_out = os.path.join(self.output_dir, "train_eval", "pos", basename)
             os.symlink(
-                os.path.abspath(os.path.join(self.output_dir, "pos", basename)),
-                os.path.join(self.output_dir, "eval", "pos", basename),
-            )
-        for img in test_pos_images:
-            basename = os.path.basename(img)
-            os.symlink(
-                os.path.abspath(os.path.join(self.output_dir, "pos", basename)),
-                os.path.join(self.output_dir, "test", "pos", basename),
+                os.path.abspath(os.path.join(self.output_dir, "pos", basename)), sym_out
             )
 
-        for img in train_neg_images:
-            basename = os.path.basename(img)
-            os.symlink(
-                os.path.abspath(os.path.join(self.output_dir, "neg", basename)),
-                os.path.join(self.output_dir, "train", "neg", basename),
+        neg_test_basenames = [
+            os.path.basename(os.path.splitext(test_img)[0])
+            for test_img in test_neg_images
+        ]
+        for infile in tqdm(glob(neg_glob)):
+            filename, ext = os.path.splitext(infile)
+            basename = os.path.basename(infile)
+            is_test_img = (
+                len(
+                    [
+                        test_img
+                        for test_img in neg_test_basenames
+                        if basename.endswith("-{}.png".format(test_img))
+                    ]
+                )
+                > 0
             )
-        for img in eval_neg_images:
-            basename = os.path.basename(img)
+            if is_test_img:
+                sym_out = os.path.join(self.output_dir, "test", "neg", basename)
+            else:
+                sym_out = os.path.join(self.output_dir, "train_eval", "neg", basename)
             os.symlink(
-                os.path.abspath(os.path.join(self.output_dir, "neg", basename)),
-                os.path.join(self.output_dir, "eval", "neg", basename),
-            )
-        for img in test_neg_images:
-            basename = os.path.basename(img)
-            os.symlink(
-                os.path.abspath(os.path.join(self.output_dir, "neg", basename)),
-                os.path.join(self.output_dir, "test", "neg", basename),
+                os.path.abspath(os.path.join(self.output_dir, "neg", basename)), sym_out
             )
 
 
@@ -189,8 +207,27 @@ class FineTuneClassifier(BaseAgent):
         )
 
         # Instantiate Datasets and Dataloaders
-        self.train_set, self.train_loader = init_data(config.get("train_data"))
-        self.eval_set, self.eval_loader = init_data(config.get("eval_data"))
+        # self.train_set, self.train_loader = init_data(config.get("train_eval_data"))
+        train_eval_config = config.get("train_eval_data")
+        ds_class = fetch_class(train_eval_config["name"])
+        d_transform = list(map(init_class, train_eval_config.get("transform", [])))
+        d_ttransform = list(
+            map(init_class, train_eval_config.get("target_transform", []))
+        )
+        ds = ds_class(
+            *train_eval_config.get("args", []),
+            **train_eval_config.get("kwargs", {}),
+            transform=Compose(d_transform) if d_transform else None,
+            target_transform=Compose(d_ttransform) if d_ttransform else None
+        )
+        train_set_ratio, eval_set_ratio = train_eval_config.get(
+            "train_eval_split_ratio", [0.85, 0.15]
+        )
+        train_len = ceil(len(ds) * train_set_ratio)
+        eval_len = len(ds) - train_len
+        self.train_set, self.eval_set = random_split(ds, [train_len, eval_len])
+        self.train_loader = DataLoader(self.train_set, **train_set_ratio.get("dataloader_kwargs", {}))
+        self.eval_loader = DataLoader(self.eval_set, **train_set_ratio.get("dataloader_kwargs", {}))
 
         # Instantiate Model
         self.model = init_class(config.get("model"))
