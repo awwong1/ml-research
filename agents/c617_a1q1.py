@@ -17,8 +17,9 @@ from util.adjust import adjust_learning_rate
 from util.checkpoint import save_checkpoint
 from util.cuda import set_cuda_devices
 from util.meters import AverageMeter
-from util.reflect import init_class, fetch_class
+from util.reflect import init_class, fetch_class, init_data
 from util.seed import set_seed
+from util.tablogger import TabLogger
 
 
 class PreprocessTileImage(BaseAgent):
@@ -277,6 +278,19 @@ class FineTuneClassifier(BaseAgent):
         # Path to in progress checkpoint.pth.tar for resuming experiment
         self.map_location = None if self.use_cuda else torch.device("cpu")
         resume = config.get("resume")
+        t_log_fpath = os.path.join(config["out_dir"], "epoch.out")
+        self.t_log = TabLogger(t_log_fpath, resume=bool(resume))  # tab logger
+        self.t_log.set_names(
+            [
+                "Epoch",
+                "Train Task Loss",
+                "Train Acc",
+                "Eval Task Loss",
+                "Eval Acc",
+                "LR",
+            ]
+        )
+
         if resume:
             self.logger.info("Resuming from checkpoint: %s", resume)
             res_chkpt = torch.load(resume, map_location=self.map_location)
@@ -402,6 +416,16 @@ class FineTuneClassifier(BaseAgent):
             },
             global_step=epoch,
         )
+        self.t_log.append(
+            [
+                epoch,
+                train_res["task_loss"],
+                train_res["top1_acc"],
+                eval_res["task_loss"],
+                eval_res["top1_acc"],
+                self.lr
+            ]
+        )
         self.logger.info(
             "FIN Epoch %(epoch)d/%(epochs)d LR: %(lr)f | "
             + "Train Loss: %(tloss).4f Acc: %(tacc).2f | "
@@ -440,6 +464,7 @@ class FineTuneClassifier(BaseAgent):
 
     def finalize(self):
         self.tb_sw.close()
+        self.t_log.close()
 
 
 class TestSetEvaluator(BaseAgent):
