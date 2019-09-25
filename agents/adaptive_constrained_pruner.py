@@ -365,7 +365,7 @@ class AdaptivePruningAgent(BaseAgent):
 
         mask_idx = 0
         for module in self.model.modules():
-            if list(module.children()) > 0:
+            if len(list(module.children())) > 0:
                 # only count leaf node modules
                 continue
             elif type(module) == MaskSTE:
