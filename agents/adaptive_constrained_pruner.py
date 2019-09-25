@@ -225,6 +225,7 @@ class AdaptivePruningAgent(BaseAgent):
                         )
                         self.make_layers_config = make_layers_config
                         self.model = pack_model
+                        self.optimizer = init_class(self.config.get("optimizer"), self.model.parameters())
                         epoch_type = "FineTune"
                         best_tune_eval_acc = eval_res["top1_acc"]
                         fine_tune_counter = 0
@@ -249,6 +250,7 @@ class AdaptivePruningAgent(BaseAgent):
                         self.model = MaskablePackingAgent.insert_masks_into_model(
                             self.model, use_cuda=self.use_cuda
                         )
+                        self.optimizer = init_class(self.config.get("optimizer"), self.model.parameters())
                         epoch_type = "Sparsity"
 
             if budget_acheived:
