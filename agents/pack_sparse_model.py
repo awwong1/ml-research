@@ -178,7 +178,9 @@ class MaskablePackingAgent(BaseAgent):
             if type(module_to_prune) == MaskSTE:
                 continue
             if len(list(module_to_prune.children())) == 0:
-                assert modstr == str(type(module_pretrained))
+                assert modstr == str(type(module_pretrained)), "{} !== {}".format(
+                    modstr, str(type(module_pretrained))
+                )
                 # copy all parameters over
                 param_lookup = dict(module_pretrained.named_parameters())
                 for param_key, param_val in module_to_prune.named_parameters():
