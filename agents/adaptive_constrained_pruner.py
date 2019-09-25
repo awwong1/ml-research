@@ -193,6 +193,8 @@ class AdaptivePruningAgent(BaseAgent):
                 eval_res = self.run_epoch_pass(
                     epoch=epoch, train=False, epoch_type=epoch_type
                 )
+            epoch_elapsed = time() - epoch_start
+            self.log_epoch_info(epoch, train_res, eval_res, epoch_type, epoch_elapsed)
 
             if epoch_type == "Sparsity":
                 post_epoch_usage = sum(self.calculate_model_parameters()).data.item()
@@ -246,9 +248,7 @@ class AdaptivePruningAgent(BaseAgent):
                     if fine_tune_counter >= self.long_term_fine_tune_patience:
                         budget_acheived = True
 
-            epoch_elapsed = time() - epoch_start
 
-            self.log_epoch_info(epoch, train_res, eval_res, epoch_type, epoch_elapsed)
             if budget_acheived:
                 self.logger.info(
                     "Budget %.2e %s acheived at %.2e %s (%d less)",
