@@ -172,6 +172,7 @@ class AdaptivePruningAgent(BaseAgent):
         best_tune_eval_acc = 0
         fine_tune_counter = 0
         budget_acheived = False
+        lr_decreased = False
 
         for epoch in range(self.start_epoch, self.epochs):
             epoch_start = time()
@@ -204,7 +205,7 @@ class AdaptivePruningAgent(BaseAgent):
 
                 if post_epoch_usage < pre_epoch_usage:
                     self.logger.info(
-                        "%s reduced from %.2e to %.2e (diff: %d) Packing...",
+                        "Masking %s reduced from %.2e to %.2e (diff: %d) Packing...",
                         self.criteria,
                         pre_epoch_usage,
                         post_epoch_usage,
@@ -226,6 +227,8 @@ class AdaptivePruningAgent(BaseAgent):
                         self.make_layers_config = make_layers_config
                         self.model = pack_model
                         self.optimizer = init_class(self.config.get("optimizer"), self.model.parameters())
+                        post_epoch_usage = sum([p.numel() for p in self.model.parameters()])
+                        self.logger.info("Packed model contains %.2e %s!", post_epoch_usage, self.criteria)
                         epoch_type = "FineTune"
                         best_tune_eval_acc = eval_res["top1_acc"]
                         fine_tune_counter = 0
@@ -238,12 +241,23 @@ class AdaptivePruningAgent(BaseAgent):
                 if cur_eval_acc > best_tune_eval_acc:
                     fine_tune_counter = 0
                     best_tune_eval_acc = cur_eval_acc
+                    self.logger.info("Resetting Fine Tune Counter, New Best Tune Evaluation Acc: %.2f", best_tune_eval_acc)
                 else:
                     fine_tune_counter += 1
+                    self.logger.info("Fine Tune Counter: %d", fine_tune_counter)
 
                 if post_epoch_usage <= self.budget:
                     if fine_tune_counter >= self.long_term_fine_tune_patience:
-                        budget_acheived = True
+                        if lr_decreased:
+                            budget_acheived = True
+                        else:
+                            new_lr = self.lr * 0.1
+                            for param_group in self.optimizer.param_groups:
+                                param_group["lr"] = new_lr
+                            self.logger.info("Long Term Fine Tuning, LR Decreased from %.1e to %.1e", self.lr, new_lr)
+                            self.lr = new_lr
+                            lr_decreased = True
+                            fine_tune_counter = 0
                 else:
                     if fine_tune_counter >= self.short_term_fine_tune_patience:
                         # Time to learn sparsity, add in the mask layers now
@@ -351,7 +365,10 @@ class AdaptivePruningAgent(BaseAgent):
 
         mask_idx = 0
         for module in self.model.modules():
-            if type(module) == MaskSTE:
+            if list(module.children()) > 0:
+                # only count leaf node modules
+                continue
+            elif type(module) == MaskSTE:
                 mask, factor = module.get_binary_mask()
                 mask_sparsity = sum(mask.view(-1))
                 param_usage += sum(mask.view(-1) * factor)
@@ -360,25 +377,24 @@ class AdaptivePruningAgent(BaseAgent):
         if mask_idx == 0:
             param_usage = sum([p.numel() for p in self.model.parameters()])
 
-        self.tb_sw.add_scalars("epoch_sparsity", epoch_sparsity, global_step=epoch)
+        if len(epoch_sparsity) > 0:
+            self.tb_sw.add_scalars("epoch_sparsity", epoch_sparsity, global_step=epoch)
         self.tb_sw.add_scalar("epoch_params", param_usage, global_step=epoch)
 
-        self.tb_sw.add_scalars(
-            "epoch",
-            {
-                "train_acc": train_res["top1_acc"],
-                "train_task_loss": train_res["task_loss"],
-                "train_kd_loss": train_res["kd_loss"],
-                "train_mask_loss": train_res["mask_loss"],
-                "eval_acc": eval_res["top1_acc"],
-                "eval_task_loss": eval_res["task_loss"],
-                "eval_kd_loss": eval_res["kd_loss"],
-                "eval_mask_loss": eval_res["mask_loss"],
-                "lr": self.lr,
-                "elapsed_time": epoch_elapsed,
-            },
-            global_step=epoch,
-        )
+        epoch_scalars = {
+            "train_acc": train_res["top1_acc"],
+            "train_task_loss": train_res["task_loss"],
+            "train_kd_loss": train_res["kd_loss"],
+            "eval_acc": eval_res["top1_acc"],
+            "eval_task_loss": eval_res["task_loss"],
+            "eval_kd_loss": eval_res["kd_loss"],
+            "lr": self.lr,
+            "elapsed_time": epoch_elapsed,
+        }
+        if epoch_type == "Sparsity":
+            epoch_scalars["train_mask_loss"] = train_res["mask_loss"]
+            epoch_scalars["eval_mask_loss"] = eval_res["mask_loss"]
+        self.tb_sw.add_scalars("epoch", epoch_scalars, global_step=epoch)
         self.t_log.append(
             [
                 epoch,
@@ -394,7 +410,7 @@ class AdaptivePruningAgent(BaseAgent):
             ]
         )
         self.logger.info(
-            "FIN %(epoch_type)s Epoch %(epoch)d/%(epochs)d LR: %(lr)f | "
+            "FIN %(epoch_type)s Epoch %(epoch)d/%(epochs)d LR: %(lr).1e | "
             + "Train Task Loss: %(ttl).4f KDL: %(tkl).4f Mask Loss: %(tml).4f Acc: %(tacc).2f | "
             + "Eval Acc: %(eacc).2f | Params: %(params).2e | "
             + "Took %(dt).1fs (%(tdt).1fs)",

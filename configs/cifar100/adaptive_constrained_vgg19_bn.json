@@ -4,10 +4,10 @@
     "cpu_only": false,
     "epochs": 10000,
     "prune": "experiments/cifar100-vgg19_bn/checkpoints/model_best.pth.tar",
-    "budget": 4300000,
+    "budget": 2010000,
     "criteria": "parameters",
     "short_term_fine_tune_patience": 2,
-    "long_term_fine_tune_patience": 2,
+    "long_term_fine_tune_patience": 4,
     "pretrained_model": {
         "name": "models.cifar.vgg.vgg19_bn",
         "kwargs": {
