@@ -150,6 +150,7 @@ class MaskablePackingAgent(BaseAgent):
             if len(list(module.children())) > 0:
                 continue
             if type(module) == torch.nn.Conv2d:
+                make_layers_config.append(module.out_channels)
                 continue
             elif type(module) == torch.nn.BatchNorm2d:
                 apply_batch_norm = True
