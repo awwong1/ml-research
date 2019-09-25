@@ -1,13 +1,13 @@
 {
-    "exp_name": "admm_constrained-cifar100-vgg19_bn",
-    "agent": "agents.admm_constrained_pruner.ADMMPruningAgent",
+    "exp_name": "adaptive_constrained-cifar100-vgg19_bn",
+    "agent": "agents.adaptive_constrained_pruner.AdaptivePruningAgent",
     "cpu_only": false,
     "epochs": 10000,
-    "gamma": 0.1,
-    "schedule": 30,
     "prune": "experiments/cifar100-vgg19_bn/checkpoints/model_best.pth.tar",
-    "budget": 4300000,
+    "budget": 2010000,
     "criteria": "parameters",
+    "short_term_fine_tune_patience": 2,
+    "long_term_fine_tune_patience": 4,
     "pretrained_model": {
         "name": "models.cifar.vgg.vgg19_bn",
         "kwargs": {
