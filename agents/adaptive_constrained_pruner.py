@@ -176,6 +176,9 @@ class AdaptivePruningAgent(BaseAgent):
         for epoch in range(self.start_epoch, self.epochs):
             epoch_start = time()
 
+            for p in self.model.parameters():
+                p.requires_grad = True
+
             # Get current usage
             if epoch_type == "Sparsity":
                 if self.criteria == "parameters":

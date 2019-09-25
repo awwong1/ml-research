@@ -136,7 +136,6 @@ class MaskablePackingAgent(BaseAgent):
             num_classes=num_classes,
             classifier_input_features=out_channels,
         )
-        print(pack_model)
         if use_cuda:
             pack_model = pack_model.cuda()
         return make_layers_config, pack_model
@@ -169,7 +168,6 @@ class MaskablePackingAgent(BaseAgent):
         )
         if use_cuda:
             model_with_masks = model_with_masks.cuda()
-        print(model_with_masks)
         # copy over the weights
         modules_pretrained = list(model.modules())
         modules_to_prune = list(model_with_masks.modules())
