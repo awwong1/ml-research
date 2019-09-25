@@ -352,6 +352,8 @@ class AdaptivePruningAgent(BaseAgent):
                 param_usage += sum(mask.view(-1) * factor)
                 epoch_sparsity["{:02d}".format(mask_idx)] = mask_sparsity
                 mask_idx += 1
+        if mask_idx == 0:
+            param_usage = sum([p.numel() for p in self.model.parameters()])
 
         self.tb_sw.add_scalars("epoch_sparsity", epoch_sparsity, global_step=epoch)
         self.tb_sw.add_scalar("epoch_params", param_usage, global_step=epoch)
