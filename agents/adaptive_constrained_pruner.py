@@ -238,16 +238,15 @@ class AdaptivePruningAgent(BaseAgent):
                     fine_tune_counter += 1
 
                 if post_epoch_usage <= self.budget:
+                    if fine_tune_counter >= self.long_term_fine_tune_patience:
+                        budget_acheived = True
+                else:
                     if fine_tune_counter >= self.short_term_fine_tune_patience:
                         # Time to learn sparsity, add in the mask layers now
                         self.model = MaskablePackingAgent.insert_masks_into_model(
                             self.model, use_cuda=self.use_cuda
                         )
                         epoch_type = "Sparsity"
-                else:
-                    if fine_tune_counter >= self.long_term_fine_tune_patience:
-                        budget_acheived = True
-
 
             if budget_acheived:
                 self.logger.info(
