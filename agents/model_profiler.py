@@ -1,12 +1,13 @@
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from torchprof import Profile
+from tqdm import tqdm
 
 from .base import BaseAgent
 from util.cuda import set_cuda_devices
 from util.reflect import init_class, init_data
 from util.seed import set_seed
-from tqdm import tqdm
+from util.meters import AverageMeter
 
 
 class ModelProfilerAgent(BaseAgent):
@@ -44,6 +45,7 @@ class ModelProfilerAgent(BaseAgent):
         # Log the classification experiment details
         self.logger.info("Eval Dataset: %s", self.eval_set)
         self.logger.info("Model: %s", self.model)
+        self.logger.info("Batch Size: %d", self.eval_loader.batch_size)
         num_params = sum([p.numel() for p in self.model.parameters()])
         num_lrn_p = sum([p.numel() for p in self.model.parameters() if p.requires_grad])
         self.logger.info(
@@ -52,12 +54,50 @@ class ModelProfilerAgent(BaseAgent):
         )
 
     def run(self):
-        for inputs, _ in tqdm(self.eval_loader):
-            # with Profile(self.model, use_cuda=self.use_cuda) as prof:
-            with torch.autograd.profiler.profile(use_cuda=self.use_cuda) as prof:
-                self.model(inputs)
-            print(prof.total_average)
-            print()
+        self_cpu_meter = AverageMeter("Self CPU Time")
+        cpu_time_meter = AverageMeter("CPU Time Total")
+        cuda_time_meter = AverageMeter("CUDA Time Total")
+
+        with tqdm(self.eval_loader) as t:
+            for inputs, _ in t:
+                # with torch.autograd.profiler.profile(use_cuda=self.use_cuda) as prof:
+                with Profile(self.model, use_cuda=self.use_cuda) as prof:
+                    self.model(inputs)
+                traces, measures = prof.raw()
+                self_cpu_time = 0
+                cpu_time_total = 0
+                cuda_time_total = 0
+                for trace, measure in measures.items():
+                    if not measure:
+                        continue
+                    one_pass = measure[0]
+                    self_cpu_time += sum([e.self_cpu_time_total for e in one_pass])
+                    cpu_time_total += sum([e.cpu_time_total for e in one_pass])
+                    cuda_time_total += sum([e.cuda_time_total for e in one_pass])
+
+                self_cpu_meter.update(self_cpu_time)
+                cpu_time_meter.update(cpu_time_total)
+                cuda_time_meter.update(cuda_time_total)
+
+                t.set_description(
+                    "Self CPU Time: {}, CPU Time Total: {}, CUDA Time Total: {}".format(
+                        torch.autograd.profiler.format_time(self_cpu_meter.avg),
+                        torch.autograd.profiler.format_time(cpu_time_meter.avg),
+                        torch.autograd.profiler.format_time(cuda_time_meter.avg),
+                    )
+                )
+        self.logger.info(
+            "Average Self CPU Time: %s, CPU Time Total: %s, CUDA Time Total: %s",
+            torch.autograd.profiler.format_time(self_cpu_meter.avg),
+            torch.autograd.profiler.format_time(cpu_time_meter.avg),
+            torch.autograd.profiler.format_time(cuda_time_meter.avg),
+        )
+        self.logger.info(
+            "STD Self CPU Time: %s, CPU Time Total: %s, CUDA Time Total: %s",
+            torch.autograd.profiler.format_time(self_cpu_meter.std),
+            torch.autograd.profiler.format_time(cpu_time_meter.std),
+            torch.autograd.profiler.format_time(cuda_time_meter.std),
+        )
 
     def finalize(self):
         self.tb_sw.close()

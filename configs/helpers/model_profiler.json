@@ -3,8 +3,31 @@
     "agent": "agents.model_profiler.ModelProfilerAgent",
     "cpu_only": false,
     "model": {
-        "name": "models.cifar.vgg.vgg19_bn",
+        "name": "models.cifar.vgg.vgg_from_layers",
         "kwargs": {
+            "layers": [
+                64,
+                64,
+                "M",
+                128,
+                128,
+                "M",
+                256,
+                256,
+                256,
+                256,
+                "M",
+                512,
+                512,
+                512,
+                512,
+                "M",
+                512,
+                512,
+                512,
+                512,
+                "M"
+            ],
             "num_classes": 100
         }
     },
@@ -20,26 +43,12 @@
         "transform": [
             {
                 "name": "torchvision.transforms.ToTensor"
-            },
-            {
-                "name": "torchvision.transforms.Normalize",
-                "args": [
-                    [
-                        0.5070757269859314,
-                        0.48655039072036743,
-                        0.4409193694591522
-                    ],
-                    [
-                        0.2673310935497284,
-                        0.2564338147640228,
-                        0.2761472463607788
-                    ]
-                ]
             }
         ],
         "dataloader_kwargs": {
-            "batch_size": 256,
-            "num_workers": 8
+            "batch_size": 1,
+            "num_workers": 1,
+            "drop_last": true
         }
     }
 }
