@@ -1,4 +1,5 @@
 import torch
+import os
 from torch.utils.tensorboard import SummaryWriter
 from torchprof import Profile
 from tqdm import tqdm
@@ -8,6 +9,7 @@ from util.cuda import set_cuda_devices
 from util.reflect import init_class, init_data
 from util.seed import set_seed
 from util.meters import AverageMeter
+from util.tablogger import TabLogger
 
 
 class ModelProfilerAgent(BaseAgent):
@@ -53,6 +55,13 @@ class ModelProfilerAgent(BaseAgent):
             {"params": num_params, "lrn_params": num_lrn_p},
         )
 
+        t_log_fpath = os.path.join(config["out_dir"], "profiler.out")
+        self.t_log = TabLogger(t_log_fpath)
+        self.t_log.set_names(
+            ["Batch Size", "Self CPU Time", "CPU Time Total", "CUDA Time Total"]
+        )
+        self.logger.info("Storing tab log output at: %s", t_log_fpath)
+
     def run(self):
         self_cpu_meter = AverageMeter("Self CPU Time")
         cpu_time_meter = AverageMeter("CPU Time Total")
@@ -78,6 +87,10 @@ class ModelProfilerAgent(BaseAgent):
                 self_cpu_meter.update(self_cpu_time)
                 cpu_time_meter.update(cpu_time_total)
                 cuda_time_meter.update(cuda_time_total)
+                batch_size = inputs.size(0)
+                self.t_log.append(
+                    [batch_size, self_cpu_time, cpu_time_total, cuda_time_total]
+                )
 
                 t.set_description(
                     "Self CPU Time: {}, CPU Time Total: {}, CUDA Time Total: {}".format(
@@ -101,3 +114,4 @@ class ModelProfilerAgent(BaseAgent):
 
     def finalize(self):
         self.tb_sw.close()
+        self.t_log.close()

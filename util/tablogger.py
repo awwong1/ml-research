@@ -1,9 +1,5 @@
-import numpy as np
-import matplotlib.pyplot as plt
-
-
 class TabLogger(object):
-    """Save scalars to log file, simple functionality to plot values"""
+    """Save scalars to tab log file"""
     COL_SEP = "\t"
     ROW_SEP = "\n"
 
@@ -21,7 +17,7 @@ class TabLogger(object):
             for numbers in self.file:
                 numbers = numbers.rstrip().split(TabLogger.COL_SEP)
                 for idx, number in enumerate(numbers):
-                    self.numbers[self.names[idx]].append(number)
+                    self.numbers[self.names[idx]].append(float(number))
             self.file.close()
             self.file = open(fpath, "a")
         else:
@@ -53,10 +49,3 @@ class TabLogger(object):
     def close(self):
         if not self.file.closed:
             self.file.close()
-
-    def plot(self):
-        for name in self.names:
-            x = np.arrange(len(self.numbers[name]))
-            plt.plot(x, np.asarray(self.numbers[name]))
-        plt.legend(self.names)
-        plt.grid(True)
