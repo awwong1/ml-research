@@ -1,7 +1,7 @@
 import torch
 
 
-def calculate_kd_loss(outputs, teacher_outputs, targets, temperature=4):
+def calculate_kd_loss(outputs, teacher_outputs, temperature=4):
     """Calculate Knowledge Distillation Loss"""
     p = torch.nn.functional.log_softmax(
         outputs.div(temperature), dim=1)

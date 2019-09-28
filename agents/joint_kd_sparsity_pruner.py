@@ -135,6 +135,7 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                 "Eval KD Loss",
                 "Eval Mask Loss",
                 "Eval Acc",
+                "Num Parameters",
                 "LR",
             ]
         )
@@ -240,7 +241,7 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                 task_loss = self.task_loss_fn(outputs, targets).mul(self.task_loss_reg)
                 task_meter.update(task_loss.data.item(), batch_size)
                 kd_loss = calculate_kd_loss(
-                    outputs, teacher_outputs, targets, temperature=self.temperature
+                    outputs, teacher_outputs, temperature=self.temperature
                 ).mul(self.kd_loss_reg)
                 kd_meter.update(kd_loss.data.item(), batch_size)
 
@@ -321,6 +322,7 @@ class JointKnowledgeDistillationPruningAgent(BaseAgent):
                 eval_res["kd_loss"],
                 eval_res["mask_loss"],
                 eval_res["top1_acc"],
+                param_usage,
                 self.lr
             ]
         )

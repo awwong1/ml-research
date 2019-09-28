@@ -310,7 +310,7 @@ class AdaptivePruningAgent(BaseAgent):
                 task_loss = self.task_loss_fn(outputs, targets).mul(self.task_loss_reg)
                 task_meter.update(task_loss.data.item(), batch_size)
                 kd_loss = calculate_kd_loss(
-                    outputs, teacher_outputs, targets, temperature=self.temperature
+                    outputs, teacher_outputs, temperature=self.temperature
                 ).mul(self.kd_loss_reg)
                 kd_meter.update(kd_loss.data.item(), batch_size)
 
