@@ -1,5 +1,5 @@
 {
-    "exp_name": "cifar100-vgg19_bn",
+    "exp_name": "cifar100-vgg19_bn-scratch-packed",
     "agent": "agents.classification.ClassificationAgent",
     "cpu_only": false,
     "epochs": 0,
@@ -7,9 +7,31 @@
     "model": {
         "name": "models.cifar.vgg.vgg_from_layers",
         "kwargs": {
-            "layers": [31, 59, "M", 116, 112, "M", 236, 242, 238, 229, "M", 463, 448, 360, 178, "M", 205, 233, 322, 114, "M"],
+            "layers": [
+                20,
+                34,
+                "M",
+                69,
+                63,
+                "M",
+                170,
+                165,
+                176,
+                116,
+                "M",
+                286,
+                226,
+                73,
+                9,
+                "M",
+                16,
+                27,
+                68,
+                116,
+                "M"
+            ],
             "batch_norm": true,
-            "classifier_input_features": 114,
+            "classifier_input_features": 116,
             "num_classes": 100
         }
     },
