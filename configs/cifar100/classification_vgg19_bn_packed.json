@@ -3,7 +3,6 @@
     "agent": "agents.classification.ClassificationAgent",
     "cpu_only": false,
     "epochs": 0,
-    "resume": "experiments/pack_sparse_model/checkpoints/vgg-pack-8.59e+06.pth.tar",
     "model": {
         "name": "models.cifar.vgg.vgg_from_layers",
         "kwargs": {
