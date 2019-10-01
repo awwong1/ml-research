@@ -1,5 +1,5 @@
 {
-    "exp_name": "adaptive_constrained-cifar100-vgg19_bn",
+    "exp_name": "adaptive_no_finetune_constrained-cifar100-vgg19_bn",
     "agent": "agents.adaptive_constrained_pruner.AdaptivePruningAgent",
     "cpu_only": false,
     "epochs": 10000,
