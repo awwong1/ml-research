@@ -250,7 +250,7 @@ class AdaptivePruningAgent(BaseAgent):
                     if (
                         self.short_term_fine_tune_patience == 0
                     ):
-                        if self.post_epoch_usage <= self.budget:
+                        if post_epoch_usage <= self.budget:
                             self.logger.info("Sparsity constraint reached, beginning long term fine tuning...")
                         else:
                             self.logger.info(
