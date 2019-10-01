@@ -7,7 +7,7 @@
     "budget": 2010000,
     "criteria": "parameters",
     "short_term_fine_tune_patience": 0,
-    "long_term_fine_tune_patience": 0,
+    "long_term_fine_tune_patience": 3,
     "pretrained_model": {
         "name": "models.cifar.vgg.vgg19_bn",
         "kwargs": {

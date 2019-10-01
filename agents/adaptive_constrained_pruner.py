@@ -249,18 +249,20 @@ class AdaptivePruningAgent(BaseAgent):
                     # Special case, do not fine tune in between Sparsity epochs
                     if (
                         self.short_term_fine_tune_patience == 0
-                        and self.long_term_fine_tune_patience == 0
                     ):
-                        self.logger.info(
-                            "Skipping Fine Tuning Epoch, Re-masking model for sparisty pruning..."
-                        )
-                        self.model = MaskablePackingAgent.insert_masks_into_model(
-                            self.model, use_cuda=self.use_cuda
-                        )
-                        self.optimizer = init_class(
-                            self.config.get("optimizer"), self.model.parameters()
-                        )
-                        epoch_type = "Sparsity"
+                        if self.post_epoch_usage <= self.budget:
+                            self.logger.info("Sparsity constraint reached, beginning long term fine tuning...")
+                        else:
+                            self.logger.info(
+                                "Skipping Fine Tuning Epoch, Re-masking model for sparisty pruning..."
+                            )
+                            self.model = MaskablePackingAgent.insert_masks_into_model(
+                                self.model, use_cuda=self.use_cuda
+                            )
+                            self.optimizer = init_class(
+                                self.config.get("optimizer"), self.model.parameters()
+                            )
+                            epoch_type = "Sparsity"
 
             elif epoch_type == "FineTune":
                 cur_eval_acc = eval_res["top1_acc"]
