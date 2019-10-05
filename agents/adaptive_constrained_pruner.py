@@ -146,6 +146,7 @@ class AdaptivePruningAgent(BaseAgent):
                 "Eval Mask Loss",
                 "Eval Acc",
                 "LR",
+                "Parameters"
             ]
         )
 
@@ -226,9 +227,17 @@ class AdaptivePruningAgent(BaseAgent):
                         )
                         self.make_layers_config = make_layers_config
                         self.model = pack_model
-                        self.optimizer = init_class(self.config.get("optimizer"), self.model.parameters())
-                        post_epoch_usage = sum([p.numel() for p in self.model.parameters()])
-                        self.logger.info("Packed model contains %.2e %s!", post_epoch_usage, self.criteria)
+                        self.optimizer = init_class(
+                            self.config.get("optimizer"), self.model.parameters()
+                        )
+                        post_epoch_usage = sum(
+                            [p.numel() for p in self.model.parameters()]
+                        )
+                        self.logger.info(
+                            "Packed model contains %.2e %s!",
+                            post_epoch_usage,
+                            self.criteria,
+                        )
                         epoch_type = "FineTune"
                         best_tune_eval_acc = eval_res["top1_acc"]
                         fine_tune_counter = 0
@@ -236,12 +245,34 @@ class AdaptivePruningAgent(BaseAgent):
                         raise NotImplementedError(
                             "Cannot pack sparse module: %s", modules[0]
                         )
+
+                    # Special case, do not fine tune in between Sparsity epochs
+                    if (
+                        self.short_term_fine_tune_patience == 0
+                    ):
+                        if post_epoch_usage <= self.budget:
+                            self.logger.info("Sparsity constraint reached, beginning long term fine tuning...")
+                        else:
+                            self.logger.info(
+                                "Skipping Fine Tuning Epoch, Re-masking model for sparisty pruning..."
+                            )
+                            self.model = MaskablePackingAgent.insert_masks_into_model(
+                                self.model, use_cuda=self.use_cuda
+                            )
+                            self.optimizer = init_class(
+                                self.config.get("optimizer"), self.model.parameters()
+                            )
+                            epoch_type = "Sparsity"
+
             elif epoch_type == "FineTune":
                 cur_eval_acc = eval_res["top1_acc"]
                 if cur_eval_acc > best_tune_eval_acc:
                     fine_tune_counter = 0
                     best_tune_eval_acc = cur_eval_acc
-                    self.logger.info("Resetting Fine Tune Counter, New Best Tune Evaluation Acc: %.2f", best_tune_eval_acc)
+                    self.logger.info(
+                        "Resetting Fine Tune Counter, New Best Tune Evaluation Acc: %.2f",
+                        best_tune_eval_acc,
+                    )
                 else:
                     fine_tune_counter += 1
                     self.logger.info("Fine Tune Counter: %d", fine_tune_counter)
@@ -254,7 +285,11 @@ class AdaptivePruningAgent(BaseAgent):
                             new_lr = self.lr * 0.1
                             for param_group in self.optimizer.param_groups:
                                 param_group["lr"] = new_lr
-                            self.logger.info("Long Term Fine Tuning, LR Decreased from %.1e to %.1e", self.lr, new_lr)
+                            self.logger.info(
+                                "Long Term Fine Tuning, LR Decreased from %.1e to %.1e",
+                                self.lr,
+                                new_lr,
+                            )
                             self.lr = new_lr
                             lr_decreased = True
                             fine_tune_counter = 0
@@ -264,7 +299,9 @@ class AdaptivePruningAgent(BaseAgent):
                         self.model = MaskablePackingAgent.insert_masks_into_model(
                             self.model, use_cuda=self.use_cuda
                         )
-                        self.optimizer = init_class(self.config.get("optimizer"), self.model.parameters())
+                        self.optimizer = init_class(
+                            self.config.get("optimizer"), self.model.parameters()
+                        )
                         epoch_type = "Sparsity"
 
             if budget_acheived:
@@ -310,7 +347,7 @@ class AdaptivePruningAgent(BaseAgent):
                 task_loss = self.task_loss_fn(outputs, targets).mul(self.task_loss_reg)
                 task_meter.update(task_loss.data.item(), batch_size)
                 kd_loss = calculate_kd_loss(
-                    outputs, teacher_outputs, targets, temperature=self.temperature
+                    outputs, teacher_outputs, temperature=self.temperature
                 ).mul(self.kd_loss_reg)
                 kd_meter.update(kd_loss.data.item(), batch_size)
 
@@ -407,6 +444,7 @@ class AdaptivePruningAgent(BaseAgent):
                 eval_res["mask_loss"],
                 eval_res["top1_acc"],
                 self.lr,
+                param_usage
             ]
         )
         self.logger.info(

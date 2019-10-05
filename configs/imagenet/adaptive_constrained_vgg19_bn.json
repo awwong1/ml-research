@@ -1,12 +1,24 @@
 {
-    "exp_name": "imagenet-vgg19_bn",
-    "agent": "agents.classification.ClassificationAgent",
+    "exp_name": "adaptive_constrained-imagenet-vgg19_bn",
+    "agent": "agents.adaptive_constrained_pruner.AdaptivePruningAgent",
     "cpu_only": false,
-    "epochs": 90,
-    "schedule": [31, 61],
-    "gamma": 0.1,
+    "epochs": 10000,
+    "prune": "experiments/imagenet-vgg19_bn/checkpoints/model_best.pth.tar",
+    "budget": 2010000,
+    "criteria": "parameters",
+    "short_term_fine_tune_patience": 2,
+    "long_term_fine_tune_patience": 4,
+    "pretrained_model": {
+        "name": "models.imagenet.vgg.vgg19_bn",
+        "kwargs": {
+            "num_classes": 1000
+        }
+    },
     "model": {
-        "name": "models.imagenet.vgg.vgg19_bn"
+        "name": "models.imagenet.vgg.vgg19_bn_maskable",
+        "kwargs": {
+            "num_classes": 1000
+        }
     },
     "train_data": {
         "name": "torchvision.datasets.ImageNet",
@@ -19,10 +31,13 @@
         },
         "transform": [
             {
-                "name": "torchvision.transforms.RandomResizedCrop",
+                "name": "torchvision.transforms.RandomCrop",
                 "args": [
                     224
-                ]
+                ],
+                "kwargs": {
+                    "padding": 4
+                }
             },
             {
                 "name": "torchvision.transforms.RandomHorizontalFlip"
@@ -63,14 +78,6 @@
         },
         "transform": [
             {
-                "name": "torchvision.transforms.Resize",
-                "args": [256]
-            },
-            {
-                "name": "torchvision.transforms.CenterCrop",
-                "args": [224]
-            },
-            {
                 "name": "torchvision.transforms.ToTensor"
             },
             {
@@ -97,12 +104,20 @@
     "task_loss": {
         "name": "torch.nn.CrossEntropyLoss"
     },
-    "optimizer": {
-        "name": "torch.optim.SGD",
+    "mask_loss": {
+        "name": "torch.nn.L1Loss",
         "kwargs": {
-            "lr": 0.1,
-            "momentum": 0.9,
-            "weight_decay": 5e-4
+            "reduction": "mean"
         }
-    }
+    },
+    "optimizer": {
+        "name": "torch.optim.Adam",
+        "kwargs": {
+            "lr": 1e-4
+        }
+    },
+    "task_loss_reg": 10.0,
+    "kd_loss_reg": 1.0,
+    "mask_loss_reg": 1.0,
+    "temperature": 4.0
 }

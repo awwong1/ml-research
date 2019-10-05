@@ -1,0 +1,22 @@
+{
+    "exp_name": "normalized-imagenet",
+    "agent": "agents.determine_normal.CalculateNormalizeAgent",
+    "cpu_only": false,
+    "datasets": [
+        {
+            "name": "torchvision.datasets.ImageNet",
+            "args": [
+                "data/imagenet"
+            ],
+            "kwargs": {
+                "split": "train",
+                "download": true
+            },
+            "transform": [
+                {
+                    "name": "torchvision.transforms.ToTensor"
+                }
+            ]
+        }
+    ]
+}

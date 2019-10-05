@@ -1,41 +1,22 @@
 {
-    "exp_name": "cifar100-vgg19_bn-scratch-packed",
-    "agent": "agents.classification.ClassificationAgent",
+    "exp_name": "adaptive_no_finetune_constrained-cifar100-vgg19_bn",
+    "agent": "agents.adaptive_constrained_pruner.AdaptivePruningAgent",
     "cpu_only": false,
-    "epochs": 164,
-    "schedule": [
-        81,
-        122
-    ],
-    "gamma": 0.1,
-    "model": {
-        "name": "models.cifar.vgg.vgg_from_layers",
+    "epochs": 10000,
+    "prune": "experiments/cifar100-vgg19_bn/checkpoints/model_best.pth.tar",
+    "budget": 2010000,
+    "criteria": "parameters",
+    "short_term_fine_tune_patience": 0,
+    "long_term_fine_tune_patience": 3,
+    "pretrained_model": {
+        "name": "models.cifar.vgg.vgg19_bn",
         "kwargs": {
-            "layers": [
-                20,
-                34,
-                "M",
-                69,
-                63,
-                "M",
-                170,
-                165,
-                176,
-                116,
-                "M",
-                286,
-                226,
-                73,
-                9,
-                "M",
-                16,
-                27,
-                68,
-                116,
-                "M"
-            ],
-            "batch_norm": true,
-            "classifier_input_features": 116,
+            "num_classes": 100
+        }
+    },
+    "model": {
+        "name": "models.cifar.vgg.vgg19_bn_maskable",
+        "kwargs": {
             "num_classes": 100
         }
     },
@@ -123,12 +104,20 @@
     "task_loss": {
         "name": "torch.nn.CrossEntropyLoss"
     },
-    "optimizer": {
-        "name": "torch.optim.SGD",
+    "mask_loss": {
+        "name": "torch.nn.L1Loss",
         "kwargs": {
-            "lr": 0.1,
-            "momentum": 0.9,
-            "weight_decay": 5e-4
+            "reduction": "mean"
         }
-    }
+    },
+    "optimizer": {
+        "name": "torch.optim.Adam",
+        "kwargs": {
+            "lr": 1e-4
+        }
+    },
+    "task_loss_reg": 10.0,
+    "kd_loss_reg": 1.0,
+    "mask_loss_reg": 1.0,
+    "temperature": 4.0
 }
