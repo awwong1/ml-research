@@ -145,7 +145,7 @@ class ClassificationAgent(BaseAgent):
             self.logger.info("Epoch 0 special condition, no grad train/eval")
             # no training, just do an evaluation pass
             with torch.no_grad():
-                train_res = self.run_epoch_pass(epoch=0, train=True)
+                train_res = self.run_epoch_pass(epoch=0, train=True, force_no_backward=True)
                 eval_res = self.run_epoch_pass(epoch=0, train=False)
             if self.force_store_checkpoint:
                 self.log_epoch_info(0, train_res, eval_res, time() - self.exp_start)
@@ -172,12 +172,15 @@ class ClassificationAgent(BaseAgent):
 
             self.log_epoch_info(epoch, train_res, eval_res, epoch_elapsed)
 
-    def run_epoch_pass(self, epoch=-1, train=True):
+    def run_epoch_pass(self, epoch=-1, train=True, force_no_backward=False):
         task_meter = AverageMeter("Task Loss")
         acc1_meter = AverageMeter("Top 1 Acc")
         acc5_meter = AverageMeter("Top 5 Acc")
 
-        self.model.train(train)
+        if force_no_backward:
+            self.model.eval()
+        else:
+            self.model.train(train)
         dataloader = self.train_loader if train else self.eval_loader
 
         with tqdm(total=len(dataloader)) as t:
@@ -199,9 +202,12 @@ class ClassificationAgent(BaseAgent):
                 acc5_meter.update(prec5.item(), batch_size)
 
                 if train:
-                    self.optimizer.zero_grad()
-                    task_loss.backward()
-                    self.optimizer.step()
+                    if force_no_backward:
+                        pass
+                    else:
+                        self.optimizer.zero_grad()
+                        task_loss.backward()
+                        self.optimizer.step()
 
                 t.set_description(
                     "{mode} Epoch {epoch}/{epochs} ".format(
