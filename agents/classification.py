@@ -129,6 +129,9 @@ class ClassificationAgent(BaseAgent):
             {"start": self.start_epoch, "end": self.epochs},
         )
 
+        # kludge in vgg19bn checkpoint
+        self.force_store_checkpoint = config.get("force_store_checkpoint")
+
         # Support multiple GPUs using DataParallel
         if self.use_cuda:
             if len(self.gpu_ids) > 1:
@@ -139,9 +142,13 @@ class ClassificationAgent(BaseAgent):
     def run(self):
         self.exp_start = time()
         if self.epochs == 0:
+            self.logger.info("Epoch 0 special condition, no grad train/eval")
             # no training, just do an evaluation pass
             with torch.no_grad():
+                train_res = self.run_epoch_pass(epoch=0, train=True)
                 eval_res = self.run_epoch_pass(epoch=0, train=False)
+            if self.force_store_checkpoint:
+                self.log_epoch_info(0, train_res, eval_res, time() - self.exp_start)
         for epoch in range(self.start_epoch, self.epochs):
             new_lr = adjust_learning_rate(
                 self.optimizer,
