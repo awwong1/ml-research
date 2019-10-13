@@ -468,7 +468,7 @@ class AdaptivePruningAgent(BaseAgent):
             },
         )
 
-        is_best_key = "{:.1e}".format(param_usage)
+        is_best_key = "{:.0e}".format(param_usage)
         prev_usage_best_acc = self.best_acc_per_usage.get(is_best_key, 0)
         usage_best_acc = max(eval_res["top1_acc"], prev_usage_best_acc)
         self.best_acc_per_usage[is_best_key] = usage_best_acc
