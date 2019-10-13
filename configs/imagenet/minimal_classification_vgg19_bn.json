@@ -120,7 +120,7 @@
         "dataloader_kwargs": {
             "batch_size": 256,
             "num_workers": 8,
-	    "pin_memory": true
+            "pin_memory": true
         }
     },
     "task_loss": {

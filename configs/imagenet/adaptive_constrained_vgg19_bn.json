@@ -34,10 +34,7 @@
                 "name": "torchvision.transforms.RandomCrop",
                 "args": [
                     224
-                ],
-                "kwargs": {
-                    "padding": 4
-                }
+                ]
             },
             {
                 "name": "torchvision.transforms.RandomHorizontalFlip"
@@ -64,7 +61,8 @@
         "dataloader_kwargs": {
             "batch_size": 256,
             "num_workers": 8,
-            "shuffle": true
+            "shuffle": true,
+            "pin_memory": true
         }
     },
     "eval_data": {
@@ -77,6 +75,14 @@
             "download": true
         },
         "transform": [
+            {
+                "name": "torchvision.transforms.Resize",
+                "args": [256]
+            },
+            {
+                "name": "torchvision.transforms.CenterCrop",
+                "args": [224]
+            },
             {
                 "name": "torchvision.transforms.ToTensor"
             },
@@ -98,7 +104,8 @@
         ],
         "dataloader_kwargs": {
             "batch_size": 256,
-            "num_workers": 8
+            "num_workers": 8,
+            "pin_memory": true
         }
     },
     "task_loss": {
