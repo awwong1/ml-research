@@ -31,7 +31,7 @@
         },
         "transform": [
             {
-                "name": "torchvision.transforms.RandomCrop",
+                "name": "torchvision.transforms.RandomResizedCrop",
                 "args": [
                     224
                 ]
