@@ -513,8 +513,9 @@ class AdaptivePruningAgent(BaseAgent):
     def calculate_model_parameters(self):
         parameters = []
         for module in self.model.modules():
+            if len(list(module.children())) > 1:
+                continue
             if type(module) == MaskSTE:
-                mask, mask_factor = module.get_binary_mask()
-                layer_parameters = sum(mask.view(-1) * mask_factor)
-                parameters.append(layer_parameters)
+                continue
+            parameters.append(sum([p.numel() for p in module.parameters()]))
         return torch.stack(parameters)
