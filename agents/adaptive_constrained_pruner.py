@@ -517,5 +517,6 @@ class AdaptivePruningAgent(BaseAgent):
                 continue
             if type(module) == MaskSTE:
                 continue
-            parameters.append(sum([p.numel() for p in module.parameters()]))
+            module_params = sum([p.numel() for p in module.parameters()])
+            parameters.append(torch.tensor(module_params))
         return torch.stack(parameters)
