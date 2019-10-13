@@ -1,12 +1,39 @@
 {
-    "exp_name": "imagenet-vgg19_bn",
+    "exp_name": "minimal-imagenet-vgg19_bn",
     "agent": "agents.classification.ClassificationAgent",
     "cpu_only": false,
-    "epochs": 90,
-    "schedule": [31, 61],
-    "gamma": 0.1,
+    "epochs": 0,
+    "schedule": [],
+    "gamma": 1,
+    "force_store_checkpoint": true,
     "model": {
-        "name": "models.imagenet.vgg.vgg19_bn"
+        "name": "models.imagenet.vgg.vgg_from_layers",
+        "kwargs": {
+            "layers": [
+                1,
+                1,
+                "M",
+                1,
+                1,
+                "M",
+                1,
+                1,
+                1,
+                1,
+                "M",
+                1,
+                1,
+                1,
+                1,
+                "M",
+                1,
+                1,
+                1,
+                1,
+                "M"
+	    ],
+	    "classifier_input_features": 1
+	}
     },
     "train_data": {
         "name": "torchvision.datasets.ImageNet",
@@ -47,9 +74,10 @@
             }
         ],
         "dataloader_kwargs": {
-            "batch_size": 64,
-            "num_workers": 4,
-            "shuffle": true
+            "batch_size": 256,
+            "num_workers": 8,
+            "shuffle": true,
+            "pin_memory": true
         }
     },
     "eval_data": {
@@ -90,8 +118,9 @@
             }
         ],
         "dataloader_kwargs": {
-            "batch_size": 64,
-            "num_workers": 4
+            "batch_size": 256,
+            "num_workers": 8,
+	    "pin_memory": true
         }
     },
     "task_loss": {
