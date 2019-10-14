@@ -4,7 +4,7 @@
     "cpu_only": false,
     "epochs": 10000,
     "prune": "experiments/pretrained-imagenet-vgg19_bn/checkpoints/checkpoint.pth.tar",
-    "budget": 28735650,
+    "budget": 2010000,
     "criteria": "parameters",
     "short_term_fine_tune_patience": 2,
     "long_term_fine_tune_patience": 4,
