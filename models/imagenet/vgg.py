@@ -28,7 +28,8 @@ model_urls = {
 
 
 class VGG(nn.Module):
-    """VGG for Imagenet. Backwards compatible with pytorch VGG models (imagenet classifier).
+    """VGG for Imagenet.
+    Backwards compatible with pytorch VGG models (imagenet classifier).
     """
 
     def __init__(self, features, num_classes=1000, classifier_input_features=512, init_weights=True):

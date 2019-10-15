@@ -15,6 +15,7 @@ from util.reflect import init_class, init_data
 from util.seed import set_seed
 from util.tablogger import TabLogger
 from models.cifar.vgg import VGG
+from models.imagenet.vgg import VGG as ImagenetVGG
 from models.mask import MaskSTE
 from agents.pack_sparse_model import MaskablePackingAgent
 
@@ -146,7 +147,7 @@ class AdaptivePruningAgent(BaseAgent):
                 "Eval Mask Loss",
                 "Eval Acc",
                 "LR",
-                "Parameters"
+                "Parameters",
             ]
         )
 
@@ -214,10 +215,13 @@ class AdaptivePruningAgent(BaseAgent):
                     )
                     # time to pack, transfer weights, and short term fine tune
                     modules = list(self.model.modules())
-                    if type(modules[0]) == VGG:
+                    if type(modules[0]) == VGG or type(modules[0]) == ImagenetVGG:
                         binary_masks = [torch.tensor([1, 1, 1])]
                         make_layers_config, pack_model = MaskablePackingAgent.gen_vgg_make_layers(
-                            modules, binary_masks, use_cuda=self.use_cuda
+                            modules,
+                            binary_masks,
+                            use_cuda=self.use_cuda,
+                            vgg_vlass=type(modules[0]),
                         )
                         self.logger.info(
                             "New VGG configuration: %s", make_layers_config
@@ -247,11 +251,11 @@ class AdaptivePruningAgent(BaseAgent):
                         )
 
                     # Special case, do not fine tune in between Sparsity epochs
-                    if (
-                        self.short_term_fine_tune_patience == 0
-                    ):
+                    if self.short_term_fine_tune_patience == 0:
                         if post_epoch_usage <= self.budget:
-                            self.logger.info("Sparsity constraint reached, beginning long term fine tuning...")
+                            self.logger.info(
+                                "Sparsity constraint reached, beginning long term fine tuning..."
+                            )
                         else:
                             self.logger.info(
                                 "Skipping Fine Tuning Epoch, Re-masking model for sparisty pruning..."
@@ -444,7 +448,7 @@ class AdaptivePruningAgent(BaseAgent):
                 eval_res["mask_loss"],
                 eval_res["top1_acc"],
                 self.lr,
-                param_usage
+                param_usage,
             ]
         )
         self.logger.info(

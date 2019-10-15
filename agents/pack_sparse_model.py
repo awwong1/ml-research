@@ -110,7 +110,7 @@ class MaskablePackingAgent(BaseAgent):
                     module_packed.bias.data.copy_(module.bias)
 
     @staticmethod
-    def gen_vgg_make_layers(modules, binary_masks, use_cuda=False):
+    def gen_vgg_make_layers(modules, binary_masks, use_cuda=False, vgg_class=VGG):
         make_layers_config = []
         apply_batch_norm = False
         num_classes = None
@@ -131,7 +131,7 @@ class MaskablePackingAgent(BaseAgent):
             elif type(module) == torch.nn.Linear:
                 assert num_classes is None
                 num_classes = module.out_features
-        pack_model = VGG(
+        pack_model = vgg_class(
             make_layers(make_layers_config, batch_norm=apply_batch_norm),
             num_classes=num_classes,
             classifier_input_features=out_channels,
