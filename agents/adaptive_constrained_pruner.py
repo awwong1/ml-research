@@ -221,7 +221,7 @@ class AdaptivePruningAgent(BaseAgent):
                             modules,
                             binary_masks,
                             use_cuda=self.use_cuda,
-                            vgg_vlass=type(modules[0]),
+                            vgg_class=type(modules[0]),
                         )
                         self.logger.info(
                             "New VGG configuration: %s", make_layers_config
