@@ -129,8 +129,8 @@ class MaskablePackingAgent(BaseAgent):
                 make_layers_config.append(out_channels)
                 binary_masks.append(bmask)
             elif type(module) == torch.nn.Linear:
-                assert num_classes is None
-                num_classes = module.out_features
+                if num_classes is None:
+                    num_classes = module.out_features
         pack_model = vgg_class(
             make_layers(make_layers_config, batch_norm=apply_batch_norm),
             num_classes=num_classes,
