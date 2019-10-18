@@ -6,6 +6,7 @@ from util.reflect import init_class
 from util.checkpoint import save_checkpoint
 from models.mask import MaskSTE
 from models.cifar.vgg import VGG, make_layers
+from models.imagenet.vgg import VGG as ImagenetVGG
 
 
 class MaskablePackingAgent(BaseAgent):
@@ -73,6 +74,8 @@ class MaskablePackingAgent(BaseAgent):
         modules = list(base_model.modules())
         module_idx = 0
         mask_idx = 1
+        first_fc = True
+
         for module in modules:
             module_packed = modules_packed[module_idx]
             if type(module) == MaskSTE:
@@ -106,8 +109,22 @@ class MaskablePackingAgent(BaseAgent):
                         module.running_var[cur_prune, ...]
                     )
                 elif type(module) == torch.nn.Linear:
-                    module_packed.weight.data.copy_(module.weight[:, pre_prune])
-                    module_packed.bias.data.copy_(module.bias)
+                    # import pdb
+                    # pdb.set_trace()
+
+                    if type(pack_model) == ImagenetVGG:
+                        if first_fc:
+                            asd = [list(range(x * 49, x * 49 + 49, 1)) for x in pre_prune]
+                            pre_prune = [item for sublist in asd for item in sublist]
+                            first_fc = False
+                            module_packed.weight.data.copy_(module.weight[:, pre_prune])
+                            module_packed.bias.data.copy_(module.bias)
+                        else:
+                            module_packed.weight.data.copy_(module.weight)
+                            module_packed.bias.data.copy_(module.bias)
+                    else:
+                        module_packed.weight.data.copy_(module.weight[:, pre_prune])
+                        module_packed.bias.data.copy_(module.bias)
 
     @staticmethod
     def gen_vgg_make_layers(modules, binary_masks, use_cuda=False, vgg_class=VGG):
@@ -129,8 +146,7 @@ class MaskablePackingAgent(BaseAgent):
                 make_layers_config.append(out_channels)
                 binary_masks.append(bmask)
             elif type(module) == torch.nn.Linear:
-                if num_classes is None:
-                    num_classes = module.out_features
+                num_classes = module.out_features
         pack_model = vgg_class(
             make_layers(make_layers_config, batch_norm=apply_batch_norm),
             num_classes=num_classes,
