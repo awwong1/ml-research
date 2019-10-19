@@ -231,6 +231,9 @@ class AdaptivePruningAgent(BaseAgent):
                         )
                         self.make_layers_config = make_layers_config
                         self.model = pack_model
+                        if self.use_cuda and len(self.gpu_ids) > 1:
+                            self.model = torch.nn.DataParallel(self.model).cuda()
+
                         self.optimizer = init_class(
                             self.config.get("optimizer"), self.model.parameters()
                         )
@@ -303,6 +306,8 @@ class AdaptivePruningAgent(BaseAgent):
                         self.model = MaskablePackingAgent.insert_masks_into_model(
                             self.model, use_cuda=self.use_cuda
                         )
+                        if self.use_cuda and len(self.gpu_ids) > 1:
+                            self.model = torch.nn.DataParallel(self.model).cuda()
                         self.optimizer = init_class(
                             self.config.get("optimizer"), self.model.parameters()
                         )
