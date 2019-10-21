@@ -1,6 +1,8 @@
 import os
 import torch
 from torch.utils.tensorboard import SummaryWriter
+from torch.utils.data import DataLoader, random_split
+from math import ceil
 from tqdm import tqdm
 from time import time
 from pprint import pformat
@@ -44,6 +46,25 @@ class AdaptivePruningAgent(BaseAgent):
         # Instantiate Datasets and Dataloaders
         self.train_set, self.train_loader = init_data(config.get("train_data"))
         self.eval_set, self.eval_loader = init_data(config.get("eval_data"))
+
+        if config.get("truncate_train_data_ratio", None):
+            truncate_train_data_ratio = config.get("truncate_train_data_ratio")
+            assert truncate_train_data_ratio > 0 and truncate_train_data_ratio < 1
+
+            train_len = ceil(len(self.train_set) * truncate_train_data_ratio)
+            drop_len = len(self.train_set) - train_len
+
+            self.logger.info(
+                "Truncating dataset randomly from %d to %d (%s ratio)",
+                len(self.train_set),
+                train_len,
+                truncate_train_data_ratio,
+            )
+            self.train_set, _ = random_split(self.train_set, [train_len, drop_len])
+            self.train_loader = DataLoader(
+                self.train_set,
+                **config.get("train_data", {}).get("dataloader_kwargs", {})
+            )
 
         # Instantiate Models
         self.pretrained_model = init_class(config.get("pretrained_model"))
@@ -231,6 +252,9 @@ class AdaptivePruningAgent(BaseAgent):
                         )
                         self.make_layers_config = make_layers_config
                         self.model = pack_model
+                        if self.use_cuda and len(self.gpu_ids) > 1:
+                            self.model = torch.nn.DataParallel(self.model).cuda()
+
                         self.optimizer = init_class(
                             self.config.get("optimizer"), self.model.parameters()
                         )
@@ -303,6 +327,8 @@ class AdaptivePruningAgent(BaseAgent):
                         self.model = MaskablePackingAgent.insert_masks_into_model(
                             self.model, use_cuda=self.use_cuda
                         )
+                        if self.use_cuda and len(self.gpu_ids) > 1:
+                            self.model = torch.nn.DataParallel(self.model).cuda()
                         self.optimizer = init_class(
                             self.config.get("optimizer"), self.model.parameters()
                         )
